@@ -1,0 +1,26 @@
+[logic@pri_medic_stalker]
+suitable = {=check_npc_name(pri_medic_stalker)} true, {=check_npc_name(sim_default_dolg_trader)} true, {=check_npc_name(sim_default_monolith_trader)} true, {=check_npc_name(sim_default_freedom_trader)} true, {=check_npc_name(sim_default_bandit_trader)} true, {=check_npc_name(sim_default_stalker_trader)} true, {=check_npc_name(sim_default_army_trader)} true, {=check_npc_name(sim_default_killer_trader)} true, {=check_npc_name(sim_default_ecolog_trader)} true, {=check_npc_name(sim_default_csky_trader)} true
+active = animpoint@leader
+prior = 200
+trade = misc\trade\trade_generic_medic.ltx
+level_spot = medic
+
+[animpoint@leader]
+cover_name = pri_a16_medic_yar
+avail_animations = animpoint_sit_normal
+;combat_ignore_cond = {=actor_enemy =check_enemy_name(actor)} false, true
+combat_ignore_keep_when_attacked = false
+invulnerable = false
+out_restr = pri_a16_sr_noweap
+meet = meet
+
+[meet]
+close_anim 		= nil
+close_victim 	= nil
+far_anim 		= nil
+far_victim 		= nil
+close_distance  = 0
+far_distance 	= 0
+close_snd_distance = 3
+allow_break 	= false
+meet_on_talking = false
