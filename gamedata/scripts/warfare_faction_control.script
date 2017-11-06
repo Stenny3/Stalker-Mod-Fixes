@@ -1,0 +1,874 @@
+printd = warfare.printd
+
+player_heli = nil
+player_heli_spot = nil
+
+local function map_spot_menu_add_property(ui,id,lvl)
+    printd(0)
+
+	local obj = alife():object(id)
+	if not (obj) then
+        printd(1)
+		return
+	end
+	
+	local selectedObject = pda_flagger.get_selected_object()	
+	
+	if (obj:clsid() == clsid.smart_terrain) then
+		local f = obj.owning_faction or "none"
+			
+		if (player_heli) then
+			local heli = alife():object(player_heli)
+			
+			if (heli) then
+				ui:AddItem("Send helicopter to point")
+				ui:AddItem("Remove helicopter")
+			else
+				player_heli = nil
+			end
+		end		
+		
+		if (f == "none") then
+			if (smart_terrain_warfare.manual_point == nil) then			
+				local objX = obj.position.x
+				local objZ = obj.position.z
+				local actX = alife():actor().position.x
+				local actZ = alife():actor().position.z
+				local dist = warfare.distance_to_xz_sqr(obj.position, alife():actor().position)
+				
+				if (dist <= 100*100) then
+					ui:AddItem("Capture Point")
+				end
+			end
+		elseif (f == warfare.actor_faction) then
+			if (obj.props and obj.props.base > 0) then
+				ui:AddItem("----------------")
+				
+				local money = db.actor:money()
+				
+				if (money > warfare_options.options.novice_squad_price) then
+					ui:AddItem("Buy novice squad")
+				end
+				
+				if (money > warfare_options.options.advanced_squad_price) then
+					ui:AddItem("Buy advanced squad")
+				end
+				
+				if (money > warfare_options.options.veteran_squad_price) then
+					ui:AddItem("Buy veteran squad")
+				end
+				
+				if (money >= warfare_options.options.heli_price) then
+					ui:AddItem("Buy helicopter")
+				end
+				
+				ui:AddItem("----------------")
+			end
+		else
+			local enemy = game_relations.is_factions_enemies(f, warfare.actor_faction)
+
+			if (not enemy and warfare.dynamic_relations_installed) then
+				ui:AddItem("Declare war")
+			end
+		end
+	elseif (obj:clsid() == clsid.online_offline_group_s) then
+		if (player_heli) then
+			local heli = alife():object(player_heli)
+			
+			if (heli) then
+				ui:AddItem("Send helicopter to squad")
+			else
+				player_heli = nil
+			end
+		end
+
+		local faction = obj:get_squad_community()
+
+		if (alife_storage_manager.get_state().enable_azazel_mode and faction == warfare.actor_faction) then -- should only be allowed is azazel mode is enabled in the game
+			ui:AddItem("Possess Squad Leader")
+		end
+	end
+	
+	if (selectedObject) then
+		if (selectedObject:clsid() == clsid.online_offline_group_s and selectedObject:get_squad_community() == warfare.actor_faction) then
+			if (obj.id == 0) then
+				ui:AddItem("Follow")
+			elseif (obj:clsid() == clsid.online_offline_group_s) then
+				local faction = obj:get_squad_community()
+				local actor_faction = faction == warfare.actor_faction
+				local friend = game_relations.is_factions_friends(faction, warfare.actor_faction)
+				local enemy = game_relations.is_factions_enemies(faction, warfare.actor_faction)
+				
+				if (enemy) then
+					ui:AddItem("Attack")
+				else
+					ui:AddItem("Follow")
+				end
+			elseif (obj:clsid() == clsid.smart_terrain) then
+				local faction = obj.owning_faction or "none"
+				local actor_faction = faction == warfare.actor_faction
+				local friend = game_relations.is_factions_friends(faction, warfare.actor_faction)
+				local enemy = game_relations.is_factions_enemies(faction, warfare.actor_faction)
+				
+				if (enemy) then
+					ui:AddItem("Attack")
+				else
+					ui:AddItem("Move Here")
+				end
+			end
+		elseif (selectedObject:clsid() == clsid.smart_terrain and selectedObject.owning_faction == warfare.actor_faction) then
+			local base = selectedObject.props and selectedObject.props.base > 0 or false
+		
+			if (obj.id == 0) then
+				ui:AddItem("Send Squad")
+				ui:AddItem("Send All Squads")
+			elseif (obj:clsid() == clsid.online_offline_group_s) then	
+				local faction = obj:get_squad_community()
+				local actor_faction = faction == warfare.actor_faction
+				local friend = game_relations.is_factions_friends(faction, warfare.actor_faction)
+				local enemy = game_relations.is_factions_enemies(faction, warfare.actor_faction)	
+
+				if (enemy) then
+					ui:AddItem("Attack")
+					ui:AddItem("Attack with All")
+				else
+					ui:AddItem("Send Squad")
+					ui:AddItem("Send All Squads")
+				end
+			elseif (obj:clsid() == clsid.smart_terrain) then
+				local faction = obj.owning_faction or "none"
+				local actor_faction = faction == warfare.actor_faction
+				local enemy = game_relations.is_factions_enemies(faction, warfare.actor_faction)
+				
+				if (enemy or faction == "none") then
+					if (base) then
+						ui:AddItem("Target")
+					end
+					
+					ui:AddItem("Attack")
+					ui:AddItem("Attack with All")		
+				else
+					if (actor_faction) then
+						ui:AddItem("Take Squad")
+						ui:AddItem("Take All Squads")
+					end			
+					
+					ui:AddItem("Send Squad")
+					ui:AddItem("Send All Squads")
+				end
+			end
+		end
+	end
+    
+    printd(2)
+end
+
+local function map_spot_menu_property_clicked(property_ui,id,level_name,prop)
+    printd(0)
+
+	local obj = alife():object(id)
+	if not (obj) then
+        printd(1)
+		return
+	end
+	
+	local selectedObject = pda_flagger.get_selected_object()
+	
+	if (prop == "Capture Point") then
+		smart_terrain_warfare.manual_point = { obj.id, game.get_game_time(), }
+		return	
+	elseif (prop == "Declare war") then
+		local faction = obj.owning_faction
+		local af = warfare.actor_faction		
+		warfare.set_faction_relations(faction, af, -5000)
+		return
+	elseif (prop == "Possess Squad Leader") then
+		possess_squad_leader(obj)
+		return
+	elseif (prop == "Buy novice squad") then
+		local f = obj.owning_faction or "none"
+		local section = faction_expansions.get_faction_squad(f, "novice")
+		local squad = alun_utils.create_squad(section, obj:name())
+		if (squad) then
+			db.actor:give_money(-1 * (warfare_options.options.novice_squad_price))			
+			sim_squad_warfare.add_companion_squad(squad)
+		end
+		
+		return
+	elseif (prop == "Buy advanced squad") then
+		local f = obj.owning_faction or "none"
+		local section = faction_expansions.get_faction_squad(f, "advanced")
+		local squad = alun_utils.create_squad(section, obj:name())
+		if (squad) then
+			db.actor:give_money(-1 * (warfare_options.options.advanced_squad_price))	
+			sim_squad_warfare.add_companion_squad(squad)
+		end
+
+		return
+	elseif (prop == "Buy veteran squad") then
+		local f = obj.owning_faction or "none"
+		local section = faction_expansions.get_faction_squad(f, "veteran")
+		local squad = alun_utils.create_squad(section, obj:name())
+		if (squad) then
+			db.actor:give_money(-1 * (warfare_options.options.veteran_squad_price))	
+			sim_squad_warfare.add_companion_squad(squad)
+		end
+
+		return
+	elseif (prop == "Send helicopter to squad" or prop == "Send helicopter to point") then
+		if (player_heli) then
+			local se_obj = alife_object(player_heli)
+			
+			if (se_obj) then
+				se_obj.current_action = 1
+				heli_alife_warfare.set_target(se_obj, obj.id)				
+
+				local text = "Sending helicopter to " .. warfare_names.get_name(obj)
+				news_manager.send_tip(db.actor, text, nil, "patriarch", nil, nil)
+			else
+				player_heli = nil
+			end
+		end
+
+		return
+	elseif (prop == "Remove helicopter") then
+		if (player_heli) then
+			local heli = alife_object(player_heli)
+			
+			if (heli) then
+				alife():release(heli,true)
+				local text = "Helicopter removed"
+				news_manager.send_tip(db.actor, text, nil, "patriarch", nil, nil)
+			end
+		end
+
+		return
+	elseif (prop == "Buy helicopter") then		
+		local charge_fee = true
+	
+		if (player_heli) then
+			local o = alife_object(player_heli)
+
+			if (o) then
+				local heliLevel = game_graph():vertex(o.m_game_vertex_id):level_id()
+				local playerLevel = game_graph():vertex(alife():actor().m_game_vertex_id):level_id()
+
+				if (heliLevel ~= playerLevel) then
+					alife():release(o, true)
+					charge_fee = false
+				else
+					local text = "Helicopter already spawned on level!"
+					news_manager.send_tip(db.actor, text, nil, "patriarch", nil, nil)
+					return
+				end
+			end
+		end
+
+		local nearestSmart = SIMBOARD.smarts[smart_terrain.nearest_to_actor_smart.id].smrt
+		local actor = alife():actor()
+		
+		if nearestSmart ~= nil then
+			local pos = vector():set(actor.position.x - 600, actor.position.y + 200, actor.position.z - 600)
+			local se_obj = heli_alife_warfare.create_heli_weak(warfare.actor_faction, 0, nearestSmart, pos)
+
+			if (se_obj) then
+				if (charge_fee) then
+					db.actor:give_money(-1 * (warfare_options.options.heli_price))
+				end
+
+				heli_alife_warfare.set_target(se_obj, 0)
+				player_heli = se_obj.id
+			
+				local text = "Helicopter en route"
+				news_manager.send_tip(db.actor, text, nil, "patriarch", nil, nil)
+			end
+		end
+
+		return
+	end
+	
+	if (selectedObject) then
+		if (selectedObject:clsid() == clsid.online_offline_group_s) then
+			if (obj.id == 0) then
+				if (prop == "Follow") then	
+					sim_squad_warfare.add_companion_squad(selectedObject)
+					sim_squad_warfare.set_target(selectedObject, obj.id)
+					return
+				end
+			elseif (obj:clsid() == clsid.online_offline_group_s) then
+				local faction = obj:get_squad_community()
+				local actor_faction = faction == warfare.actor_faction
+				local friend = game_relations.is_factions_friends(faction, warfare.actor_faction)
+				local enemy = game_relations.is_factions_enemies(faction, warfare.actor_faction)
+				
+				if (enemy) then
+					if (prop == "Attack") then
+						local squadName = warfare_names.get_name(selectedObject)
+						local targetName = warfare_names.get_name(obj)
+						local text = "Sending "..squadName.." to attack "..targetName
+
+						sim_squad_warfare.set_target(selectedObject, obj.id)
+						news_manager.send_tip(db.actor, text, nil, "patriarch", nil, nil)
+						return
+					end
+				else
+					if (prop == "Follow") then
+						local squadName = warfare_names.get_name(selectedObject)
+						local targetName = warfare_names.get_name(obj)
+						local text = squadName.." is now following "..targetName
+
+						sim_squad_warfare.set_target(selectedObject, obj.id)					
+						news_manager.send_tip(db.actor, text, nil, "patriarch", nil, nil)
+						return
+					end
+				end
+			elseif (obj:clsid() == clsid.smart_terrain) then
+				local faction = obj.owning_faction or "none"
+				local actor_faction = faction == warfare.actor_faction
+				local friend = game_relations.is_factions_friends(faction, warfare.actor_faction)
+				local enemy = game_relations.is_factions_enemies(faction, warfare.actor_faction)
+				
+				if (enemy) then
+					if (prop == "Attack") then
+						local squadName = warfare_names.get_name(selectedObject)
+						local smartName = warfare_names.get_name(obj)
+						local text = "Sending "..squadName.." to attack "..smartName
+
+						sim_squad_warfare.set_target(selectedObject, obj.id)				
+						news_manager.send_tip(db.actor, text, nil, "patriarch", nil, nil)
+						return
+					end
+				else
+					if (prop == "Move Here") then
+						local squadName = warfare_names.get_name(selectedObject)
+						local smartName = warfare_names.get_name(obj)
+						local text = "Sending "..squadName.." to "..smartName
+
+						sim_squad_warfare.set_target(selectedObject, obj.id)					
+						news_manager.send_tip(db.actor, text, nil, "patriarch", nil, nil)
+						return
+					end
+				end
+			end
+		elseif (selectedObject:clsid() == clsid.smart_terrain) then
+			local base = selectedObject.props and selectedObject.props.base > 0 or false
+		
+			if (obj.id == 0) then
+				if (prop == "Send Squad") then
+					local squads = SIMBOARD.smarts[selectedObject.id].squads
+										
+					for sid,_ in pairs(squads) do
+						local squad = alife_object(sid)
+
+						if (squad) then
+							if (squad.registered_with_warfare and squad.current_action == 1 and squad:get_squad_community() == warfare.actor_faction) then
+								--sim_squad_warfare.set_target(squad, obj.id)	
+								sim_squad_warfare.add_companion_squad(squad)
+								local smartName = warfare_names.point_names[selectedObject:name()] or selectedObject:name()
+								local text = "Sending one defense squad from "..smartName.."'s squad follow the player."					
+								news_manager.send_tip(db.actor, text, nil, "patriarch", nil, nil)
+								
+								printd(2)
+								return
+							end
+						end
+					end
+				elseif (prop == "Send All Squads") then
+					local squads = SIMBOARD.smarts[selectedObject.id].squads
+										
+					for sid,_ in pairs(squads) do
+						local squad = alife_object(sid)
+
+						if (squad) then
+							if (squad.registered_with_warfare and squad.current_action == 1 and squad:get_squad_community() == warfare.actor_faction) then
+								sim_squad_warfare.set_target(squad, obj.id)
+								local smartName = warfare_names.point_names[selectedObject:name()] or selectedObject:name()
+								local text = "Sending all defense squads from "..smartName.."'s squad follow the player."			
+								news_manager.send_tip(db.actor, text, nil, "patriarch", nil, nil)
+							end
+						end
+					end
+					
+					printd(3)
+					return
+				end
+			elseif (obj:clsid() == clsid.online_offline_group_s) then	
+				local faction = obj:get_squad_community()
+				local actor_faction = faction == warfare.actor_faction
+				local friend = game_relations.is_factions_friends(faction, warfare.actor_faction)
+				local enemy = game_relations.is_factions_enemies(faction, warfare.actor_faction)	
+
+				if (enemy) then
+					if (prop == "Attack") then
+						local squads = SIMBOARD.smarts[selectedObject.id].squads
+											
+						for sid,_ in pairs(squads) do
+							local squad = alife_object(sid)
+
+							if (squad) then
+								if (squad.registered_with_warfare and squad.current_action == 1 and squad:get_squad_community() == warfare.actor_faction) then
+									sim_squad_warfare.set_target(squad, obj.id)
+									local commanderID = obj:commander_id()
+									local commander = commanderID and alife():object(commanderID)
+									local commanderName = commander and commander.character_name and commander:character_name()	
+									local smartName = warfare_names.point_names[selectedObject:name()] or selectedObject:name()	
+									local text = "Sending one defense squad from "..smartName.."'s squad to attack "..commanderName.."'s squad."
+									news_manager.send_tip(db.actor, text, nil, "patriarch", nil, nil)
+									printd(2)
+									return
+								end
+							end
+						end
+
+						return
+					elseif (prop == "Attack with All") then
+						--printf("!!! SEND ALL SQUADS !!!")
+						local squads = SIMBOARD.smarts[selectedObject.id].squads
+											
+						for sid,_ in pairs(squads) do
+							local squad = alife_object(sid)
+
+							if (squad) then
+								if (squad.registered_with_warfare and squad.current_action == 1 and squad:get_squad_community() == warfare.actor_faction) then
+									sim_squad_warfare.set_target(squad, obj.id)
+									local commanderID = obj:commander_id()
+									local commander = commanderID and alife():object(commanderID)
+									local commanderName = commander and commander.character_name and commander:character_name()	
+									local smartName = warfare_names.point_names[selectedObject:name()] or selectedObject:name()	
+									local text = "Sending all defense squads from "..smartName.."'s squad to attack "..commanderName.."'s squad."
+									news_manager.send_tip(db.actor, text, nil, "patriarch", nil, nil)
+								end
+							end
+						end
+						
+						printd(3)
+						return
+					end
+				else
+					if (prop == "Send Squad") then
+						local squads = SIMBOARD.smarts[selectedObject.id].squads
+											
+						for sid,_ in pairs(squads) do
+							local squad = alife_object(sid)
+
+							if (squad) then
+								if (squad.registered_with_warfare and squad.current_action == 1 and squad:get_squad_community() == warfare.actor_faction) then
+									sim_squad_warfare.set_target(squad, obj.id)
+									local commanderID = obj:commander_id()
+									local commander = commanderID and alife():object(commanderID)
+									local commanderName = commander and commander.character_name and commander:character_name()	
+									local smartName = warfare_names.point_names[selectedObject:name()] or selectedObject:name()	
+									local text = "Sending one defense squad from "..smartName.."'s squad to follow"..commanderName.."'s squad."
+									news_manager.send_tip(db.actor, text, nil, "patriarch", nil, nil)
+									printd(2)
+									return
+								end
+							end
+						end
+					elseif (prop == "Send All Squads") then
+						--printf("!!! SEND ALL SQUADS !!!")
+						local squads = SIMBOARD.smarts[selectedObject.id].squads
+											
+						for sid,_ in pairs(squads) do
+							local squad = alife_object(sid)
+
+							if (squad) then
+								if (squad.registered_with_warfare and squad.current_action == 1 and squad:get_squad_community() == warfare.actor_faction) then
+									sim_squad_warfare.set_target(squad, obj.id)
+									local commanderID = obj:commander_id()
+									local commander = commanderID and alife():object(commanderID)
+									local commanderName = commander and commander.character_name and commander:character_name()	
+									local smartName = warfare_names.point_names[selectedObject:name()] or selectedObject:name()	
+									local text = "Sending all defense squads from "..smartName.."'s squad to follow"..commanderName.."'s squad."
+									news_manager.send_tip(db.actor, text, nil, "patriarch", nil, nil)
+								end
+							end
+						end
+						
+						printd(3)
+						return
+					end
+				end
+			elseif (obj:clsid() == clsid.smart_terrain) then
+				local faction = obj.owning_faction or "none"
+				local actor_faction = faction == warfare.actor_faction
+				local enemy = game_relations.is_factions_enemies(faction, warfare.actor_faction)
+				
+				if (enemy or faction == "none") then
+					if (base) then
+						if (prop == "Target") then						
+							if not (selectedObject.target_smarts[obj.id]) then
+								selectedObject.target_smarts[obj.id] = true
+								local smartName = warfare_names.point_names[selectedObject:name()] or selectedObject:name()	
+								local targetName = warfare_names.point_names[obj:name()] or obj:name()
+								local text = "Adding "..targetName.." to ".." "..smartName.."'s targets"
+								news_manager.send_tip(db.actor, text, nil, "patriarch", nil, nil)
+							end
+						end
+					end
+					
+					if (prop == "Attack") then
+						local squads = SIMBOARD.smarts[selectedObject.id].squads
+						local available = {}
+											
+						for sid,_ in pairs(squads) do
+							local squad = alife_object(sid)
+
+							if (squad) then
+								if (squad.registered_with_warfare and squad.current_action == 1 and squad:get_squad_community() == warfare.actor_faction) then
+									available[#available+1] = squad
+								end
+							end
+						end
+						
+						local s = available[math.random(#available)]						
+						sim_squad_warfare.set_target(s, obj.id)
+						
+						local smartName = warfare_names.point_names[selectedObject:name()] or selectedObject:name()	
+						local targetName = warfare_names.point_names[obj:name()] or obj:name()
+						local text = "Sending one squad from "..smartName.." to attack "..targetName.."."
+						news_manager.send_tip(db.actor, text, nil, "patriarch", nil, nil)
+
+						return
+					elseif ("Attack with All") then
+						--printf("!!! SEND ALL SQUADS !!!")
+						local squads = SIMBOARD.smarts[selectedObject.id].squads
+											
+						for sid,_ in pairs(squads) do
+							local squad = alife_object(sid)
+
+							if (squad) then
+								if (squad.registered_with_warfare and squad.current_action == 1 and squad:get_squad_community() == warfare.actor_faction) then
+									sim_squad_warfare.set_target(squad, obj.id)
+								end
+							end
+						end
+						
+						local smartName = warfare_names.point_names[selectedObject:name()] or selectedObject:name()	
+						local targetName = warfare_names.point_names[obj:name()] or obj:name()
+						local text = "Sending all squads from "..smartName.." to attack "..targetName.."."
+						news_manager.send_tip(db.actor, text, nil, "patriarch", nil, nil)
+						
+						printd(3)
+						return
+					end		
+				else						
+					if (actor_faction) then
+						if (prop == "Take Squad") then
+							local squads = SIMBOARD.smarts[obj.id].squads						
+							local available = {}
+												
+							for sid,_ in pairs(squads) do
+								local squad = alife_object(sid)
+
+								if (squad) then
+									if (squad.registered_with_warfare and squad.current_action == 1 and squad:get_squad_community() == warfare.actor_faction) then
+										available[#available+1] = squad
+									end
+								end
+							end
+							
+							local s = available[math.random(#available)]						
+							sim_squad_warfare.set_target(s, selectedObject.id)
+						
+							local smartName = warfare_names.point_names[selectedObject:name()] or selectedObject:name()	
+							local targetName = warfare_names.point_names[obj:name()] or obj:name()
+							local text = "Moving one squad from "..targetName.." to attack "..smartName.."."
+							news_manager.send_tip(db.actor, text, nil, "patriarch", nil, nil)
+							return
+						end
+						
+
+						if (prop == "Take All Squads") then
+							local squads = SIMBOARD.smarts[obj.id].squads
+												
+							for sid,_ in pairs(squads) do
+								local squad = alife_object(sid)
+
+								if (squad) then
+									if (squad.registered_with_warfare and squad.current_action == 1 and squad:get_squad_community() == warfare.actor_faction) then
+										--printf("sending " .. squad:name() .. " to " .. obj:name())
+										sim_squad_warfare.set_target(squad, selectedObject.id)
+									end
+								end
+							end
+						
+							local smartName = warfare_names.point_names[selectedObject:name()] or selectedObject:name()	
+							local targetName = warfare_names.point_names[obj:name()] or obj:name()
+							local text = "Moving one squad from "..targetName.." to attack "..smartName.."."
+							news_manager.send_tip(db.actor, text, nil, "patriarch", nil, nil)
+							
+							return
+						end
+					end
+				
+					if (prop == "Send Squad") then
+						local squads = SIMBOARD.smarts[selectedObject.id].squads						
+						local available = {}
+											
+						for sid,_ in pairs(squads) do
+							local squad = alife_object(sid)
+
+							if (squad) then
+								if (squad.registered_with_warfare and squad.current_action == 1 and squad:get_squad_community() == warfare.actor_faction) then
+									available[#available+1] = squad
+								end
+							end
+						end
+						
+						local s = available[math.random(#available)]						
+						sim_squad_warfare.set_target(s, obj.id)
+						
+						local smartName = warfare_names.point_names[selectedObject:name()] or selectedObject:name()	
+						local targetName = warfare_names.point_names[obj:name()] or obj:name()
+						local text = "Sending one squad from "..smartName.." to "..targetName.."."
+						news_manager.send_tip(db.actor, text, nil, "patriarch", nil, nil)
+						return
+					elseif (prop == "Send All Squads") then
+						--printf("!!! SEND ALL SQUADS !!!")
+						local squads = SIMBOARD.smarts[selectedObject.id].squads
+											
+						for sid,_ in pairs(squads) do
+							local squad = alife_object(sid)
+
+							if (squad) then
+								if (squad.registered_with_warfare and squad.current_action == 1 and squad:get_squad_community() == warfare.actor_faction) then
+									--printf("sending " .. squad:name() .. " to " .. obj:name())
+									sim_squad_warfare.set_target(squad, obj.id)
+								end
+							end
+						end
+						
+						local smartName = warfare_names.point_names[selectedObject:name()] or selectedObject:name()	
+						local targetName = warfare_names.point_names[obj:name()] or obj:name()
+						local text = "Sending all squads from "..smartName.." to "..targetName.."."
+						news_manager.send_tip(db.actor, text, nil, "patriarch", nil, nil)
+						
+						printd(4)
+						return
+					end
+				end
+			end
+		end
+	end
+    
+    printd(2)
+end
+
+function on_game_start()
+	RegisterScriptCallback("map_spot_menu_add_property",map_spot_menu_add_property)
+	RegisterScriptCallback("map_spot_menu_property_clicked",map_spot_menu_property_clicked)
+end
+
+-- slightly modified from azazel_mode.script
+function possess_squad_leader(squad)
+
+	local commander = squad:commander_id()
+	local se_obj = commander and alife():object(commander)
+
+	axr_companions.remove_all_from_actor_squad()
+
+	local sim = alife()	
+	
+	local ignore_list = {
+		["bolt"] = true,
+		["device_torch"] = true,
+		["device_pda"] = true,
+		["wpn_binoc"] = true,
+		["medkit_script"] = true,
+		["guitar_a"] = true,
+		["harmonica_a"] = true,
+		["anim_binoc"] = true,
+		["anim_knife"] = true,
+		["hand_radio"] = true,
+		["hand_radio_r"] = true,
+		["stick_bred"] = true,
+		["stick_kolbasa"] = true,
+		["stick_kolbasa_bred"] = true,
+		["wpn_knife"] = true
+	}
+	
+	bind_stalker_ext.invulnerable_time = time_global() + 30000
+	db.actor:set_health_ex(1)
+	
+	-- make squad actor companions
+	local squad = sim:object(se_obj.group_id)
+	if (squad) then
+		SIMBOARD:assign_squad_to_smart(squad, nil)
+		axr_companions.companion_squads[squad.id] = squad
+		for k in squad:squad_members() do 
+			if (k.id ~= se_obj.id) then
+				axr_companions.non_task_companions[k.id] = true
+				utils.se_obj_save_var(k.id,k.object:name(),"companion",true)
+				local member = db.storage[k.id] and db.storage[k.id].object 
+				if (member) then
+					axr_companions.setup_companion_logic(member,db.storage[k.id],false)
+				end
+			end
+		end
+	end
+
+	local se_actor = sim:actor()
+	-- actor corpse 
+	local se_mimic = sim:create("stalker_azazel",se_actor.position,se_actor.m_level_vertex_id,se_actor.m_game_vertex_id)
+	if (se_mimic) then 
+		se_mimic:set_character_name(se_actor:character_name())
+		se_mimic:set_profile_name(se_actor:profile_name())
+		se_mimic:kill()
+		
+		local m_data = alife_storage_manager.get_se_obj_state(se_mimic,true)
+		if (m_data) then
+			m_data.icon_name = se_actor:character_icon()
+			m_data.visual = db.actor:get_visual_name()
+		end
+		
+		local function release_actor_item(temp, item)
+			if not (ignore_list[item:section()]) then
+				local se_item = sim:object(item:id())
+				if (se_item) then
+					local sec = se_item:section_name()
+					sim:release(se_item,true)
+					sim:create(sec,se_mimic.position,se_mimic.m_level_vertex_id,se_mimic.m_game_vertex_id,se_mimic.id)
+				end
+			end
+		end
+		db.actor:iterate_inventory(release_actor_item,nil)
+	end
+
+	se_actor:set_character_name(se_obj:character_name())
+
+	local faction = se_obj:community()
+	se_actor:set_rank(se_obj:rank())
+	db.actor:set_character_community("actor_"..faction)
+	db.actor:set_character_reputation(se_obj:reputation())
+	db.actor:give_money(10*math.random(1,250)+500)
+	
+	game_relations.set_community_goodwill_for_faction("actor_"..faction)
+		
+	-- copy all items except ignored
+	for i=1,65534 do 
+		local se_item = sim:object(i)
+		if (se_item and se_item.parent_id == se_obj.id) then
+			local sec = se_item:section_name()
+			if not (ignore_list[sec]) then
+				give_object_to_actor(sec)
+			end
+		end
+	end
+	
+	-- create outfit based on stalker visual type
+	local section = se_obj:section_name()
+	if (string.find(section,"_4")) then 
+		local f = {
+			["stalker"] = "exo_outfit",
+			["bandit"] = "bandit_exo_outfit",
+			["csky"] = "cs_heavy_outfit",
+			["killer"] = "exo_outfit",
+			["army"] = "military_exo_outfit",
+			["dolg"] = "dolg_exo_outfit",
+			["freedom"] = "svoboda_exo_outfit",
+			["ecolog"] = "ecolog_outfit_orange",
+			["monolith"] = "monolith_exo_outfit"
+		}
+		give_object_to_actor(f[faction] or "novice_outfit")
+	elseif (string.find(section,"_3")) then 
+		local f = {
+			["stalker"] = "exo_outfit",
+			["bandit"] = "bandit_exo_outfit",
+			["csky"] = "cs_heavy_outfit",
+			["killer"] = "merc_scientific_outfit",
+			["army"] = "specops_outfit",
+			["dolg"] = "dolg_scientific_outfit",
+			["freedom"] = "svoboda_heavy_outfit",
+			["ecolog"] = "ecolog_outfit_orange",
+			["monolith"] = "monolith_scientific_outfit"
+		}
+		give_object_to_actor(f[faction] or "novice_outfit")		
+	elseif (string.find(section,"_2")) then 
+		local f = {
+			["stalker"] = "stalker_outfit",
+			["bandit"] = "trenchcoat_outfit",
+			["csky"] = "cs_light_outfit",
+			["killer"] = "merc_outfit",
+			["army"] = "military_outfit",
+			["dolg"] = "dolg_outfit",
+			["freedom"] = "svoboda_light_outfit",
+			["ecolog"] = "ecolog_outfit_green",
+			["monolith"] = "monolith_outfit"
+		}
+		give_object_to_actor(f[faction] or "novice_outfit")		
+	elseif (string.find(section,"_1")) then 
+		local f = {
+			["stalker"] = "stalker_outfit",
+			["bandit"] = "trenchcoat_outfit",
+			["csky"] = "cs_light_outfit",
+			["killer"] = "merc_outfit",
+			["army"] = "military_outfit",
+			["dolg"] = "dolg_outfit",
+			["freedom"] = "svoboda_light_outfit",
+			["ecolog"] = "ecolog_outfit_green",
+			["monolith"] = "monolith_outfit"
+		}
+		give_object_to_actor(f[faction] or "novice_outfit")		
+	else 
+		local f = {
+			["stalker"] = "novice_outfit",
+			["bandit"] = "bandit_novice_outfit",
+			["csky"] = "cs_novice_outfit",
+			["killer"] = "merc_novice_outfit",
+			["army"] = "military_novice_outfit",
+			["dolg"] = "dolg_novice_outfit",
+			["freedom"] = "svoboda_novice_outfit",
+			["ecolog"] = "ecolog_guard_outfit",
+			["monolith"] = "monolith_novice_outfit"
+		}
+		give_object_to_actor(f[faction] or "novice_outfit")		
+	end 
+	
+	-- cancel all tasks
+	local task_info = task_manager.get_task_manager().task_info
+	local task_ini = task_manager.task_ini
+	for task_id,tbl in pairs(task_info) do
+		--if not (tbl.storyline) then
+			tbl.forced_status = "fail"
+			tbl.cancelled_by_actor = true
+		--end
+	end
+		
+	-- initiate transitition and removal of victim
+	local level_name = sim:level_name(game_graph():vertex(se_obj.m_game_vertex_id):level_id())
+	
+	db.actor:set_health_ex(1)
+	db.actor.bleeding = 0
+	db.actor.radiation = 0
+	
+	if (level_name == level.name()) then 
+		local hud = get_hud()
+		hud:HidePdaMenu()
+		hud:HideActorMenu()
+		db.actor:set_actor_position(se_obj.position)
+		--level.disable_input()
+		--level.remove_cam_effector(210409)
+		--level.add_cam_effector("camera_effects\\prison_1.anm", 210409, false, "azazel_mode.cam_effector_end")
+		level.add_pp_effector("deimos1.ppe", 210410, false)
+		safe_release_manager.release(se_obj)
+	else
+		local pos = se_obj.position
+		local lvid = se_obj.m_level_vertex_id
+		local gvid = se_obj.m_game_vertex_id
+		level.add_pp_effector("deimos1.ppe", 210410, false)
+		safe_release_manager.release(se_obj)
+		alife_storage_manager.get_state().azazel_death = true
+		local function tele_me_now(id)
+			ChangeLevel(pos,lvid,gvid,vector():set(0,0,0))
+			
+			
+		db.actor:set_health_ex(1)
+		db.actor.bleeding = 0
+		db.actor.radiation = 0
+			
+			return true
+		end
+		CreateTimeEvent(0,"tele",0,tele_me_now,se_obj.id)
+	end
+end

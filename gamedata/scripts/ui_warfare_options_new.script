@@ -1,0 +1,355 @@
+local warfare_control = nil
+local xml = nil
+advanced = false
+
+class "warfare_options_new" (CUIScriptWnd)
+function warfare_options_new:__init() super()
+	self:SetWndRect(Frect():set(0,0,1024,768))
+	self:Enable					(true)
+	
+	self.edits = {}
+	self.combos = {}
+	self.checks = {}
+	self.factions = {}
+	
+	xml = CScriptXmlInit()
+	xml:ParseFile("ui_warfare_options1.xml")
+	
+	xml:InitStatic("background", self)
+	self.dialog = xml:InitStatic("dialog", self)
+	
+	self.dialog_title = xml:InitEditBox("lbl_warfare_options", self.dialog)
+	self.dialog_title:Enable(false)
+	
+	self.btnAccept = xml:Init3tButton("btn_accept", self.dialog)
+	self:Register(self.btnAccept, "btn_accept")
+	self:AddCallback("btn_accept", ui_events.BUTTON_CLICKED, self.btn_accept_clicked, self)
+
+	self.btnCancel = xml:Init3tButton("btn_cancel", self.dialog)
+	self:Register(self.btnCancel, "btn_cancel")
+	self:AddCallback("btn_cancel", ui_events.BUTTON_CLICKED, self.btn_cancel_clicked, self)
+
+	self.cmb_tab = xml:InitComboBox("cmb_tab", self.dialog)
+	self:Register(self.cmb_tab, "cmb_tab")
+	self:SetAutoDelete(true)
+	self:AddCallback("cmb_tab", ui_events.LIST_ITEM_SELECT, self.cmb_tab_item_selected, self)
+
+	local items = {
+		"General",
+		"Stalker",
+		"Bandit",
+		"Clear Sky",
+		"Military",
+		"Freedom",
+		"Duty",
+		"Ecologist",
+		"Mercenary",
+		"Monolith",
+		"Zombified Stalkers"
+	}
+
+	self.cmb_tab.items = {}
+
+	for i,v in pairs(items) do
+		self.cmb_tab:AddItem(v, i-1)
+		self.cmb_tab.items[#self.cmb_tab.items+1] = v
+	end	
+
+	self.item_to_table = {
+		["General"] = "general",
+		["Stalker"] = "stalker",
+		["Bandit"] = "bandit",
+		["Clear Sky"] = "csky",
+		["Military"] = "army",
+		["Freedom"] = "freedom",
+		["Duty"] = "dolg",
+		["Ecologist"] = "ecolog",
+		["Mercenary"] = "killer",
+		["Monolith"] = "monolith",
+		["Zombified Stalkers"] = "zombied"
+	}
+
+	self.option_dialogs = {}
+
+	-- From ui_mm_faction_select.script
+	self.hint_wnd = xml:InitFrame("hint_wnd:background", self)
+	self.hint_wnd:SetAutoDelete(false)
+	self.hint_wnd_text = xml:InitTextWnd("hint_wnd:text", self.hint_wnd)
+	self.hint_wnd:Show(false)
+
+	self.option_dialogs["general"] = ui_warfare_options_general.warfare_options_general()
+	self.option_dialogs["general"]:InitControls(0, 0, xml, self)
+	self.option_dialogs["general"]:Show(true)
+	self.dialog:AttachChild(self.option_dialogs["general"])
+	xml:InitWindow("tab_size", 0, self.option_dialogs["general"])
+	self.dialog_title:SetText("Warfare Options - General Settings")
+
+	self.option_dialogs["stalker"] = ui_warfare_options_faction.warfare_options_faction()
+	self.option_dialogs["stalker"]:InitControls(0, 0, xml, self, "stalker")
+	self.option_dialogs["stalker"]:Show(false)
+	self.dialog:AttachChild(self.option_dialogs["stalker"])
+	xml:InitWindow("tab_size", 0, self.option_dialogs["stalker"])
+
+	self.option_dialogs["bandit"] = ui_warfare_options_faction.warfare_options_faction()
+	self.option_dialogs["bandit"]:InitControls(0, 0, xml, self, "bandit")
+	self.option_dialogs["bandit"]:Show(false)
+	self.dialog:AttachChild(self.option_dialogs["bandit"])
+	xml:InitWindow("tab_size", 0, self.option_dialogs["bandit"])
+
+	self.option_dialogs["csky"] = ui_warfare_options_faction.warfare_options_faction()
+	self.option_dialogs["csky"]:InitControls(0, 0, xml, self, "csky")
+	self.option_dialogs["csky"]:Show(false)
+	self.dialog:AttachChild(self.option_dialogs["csky"])
+	xml:InitWindow("tab_size", 0, self.option_dialogs["csky"])
+
+	self.option_dialogs["army"] = ui_warfare_options_faction.warfare_options_faction()
+	self.option_dialogs["army"]:InitControls(0, 0, xml, self, "army")
+	self.option_dialogs["army"]:Show(false)
+	self.dialog:AttachChild(self.option_dialogs["army"])
+	xml:InitWindow("tab_size", 0, self.option_dialogs["army"])
+
+	self.option_dialogs["freedom"] = ui_warfare_options_faction.warfare_options_faction()
+	self.option_dialogs["freedom"]:InitControls(0, 0, xml, self, "freedom")
+	self.option_dialogs["freedom"]:Show(false)
+	self.dialog:AttachChild(self.option_dialogs["freedom"])
+	xml:InitWindow("tab_size", 0, self.option_dialogs["freedom"])
+
+	self.option_dialogs["dolg"] = ui_warfare_options_faction.warfare_options_faction()
+	self.option_dialogs["dolg"]:InitControls(0, 0, xml, self, "dolg")
+	self.option_dialogs["dolg"]:Show(false)
+	self.dialog:AttachChild(self.option_dialogs["dolg"])
+	xml:InitWindow("tab_size", 0, self.option_dialogs["dolg"])
+
+	self.option_dialogs["ecolog"] = ui_warfare_options_faction.warfare_options_faction()
+	self.option_dialogs["ecolog"]:InitControls(0, 0, xml, self, "ecolog")
+	self.option_dialogs["ecolog"]:Show(false)
+	self.dialog:AttachChild(self.option_dialogs["ecolog"])
+	xml:InitWindow("tab_size", 0, self.option_dialogs["ecolog"])
+
+	self.option_dialogs["killer"] = ui_warfare_options_faction.warfare_options_faction()
+	self.option_dialogs["killer"]:InitControls(0, 0, xml, self, "killer")
+	self.option_dialogs["killer"]:Show(false)
+	self.dialog:AttachChild(self.option_dialogs["killer"])
+	xml:InitWindow("tab_size", 0, self.option_dialogs["killer"])
+
+	self.option_dialogs["monolith"] = ui_warfare_options_faction.warfare_options_faction()
+	self.option_dialogs["monolith"]:InitControls(0, 0, xml, self, "monolith")
+	self.option_dialogs["monolith"]:Show(false)
+	self.dialog:AttachChild(self.option_dialogs["monolith"])
+	xml:InitWindow("tab_size", 0, self.option_dialogs["monolith"])
+
+	self.option_dialogs["zombied"] = ui_warfare_options_faction.warfare_options_faction()
+	self.option_dialogs["zombied"]:InitControls(0, 0, xml, self, "zombied")
+	self.option_dialogs["zombied"]:Show(false)
+	self.dialog:AttachChild(self.option_dialogs["zombied"])
+	xml:InitWindow("tab_size", 0, self.option_dialogs["zombied"])
+end
+
+function warfare_options_new:SetHint(text,pos)
+	if (text == "") then
+		return
+	end
+	self.hint_wnd:Show(true)
+	self.hint_wnd_text:SetText(text)
+	self.hint_wnd_text:AdjustHeightToText()
+	self.hint_wnd:SetWndSize(vector2():set(self.hint_wnd:GetWidth(),self.hint_wnd_text:GetHeight()+44))
+	
+	pos = pos or GetCursorPosition()
+	pos.y = pos.y - self.hint_wnd:GetHeight()
+	pos.x = pos.x - self.hint_wnd:GetWidth()
+	self.hint_wnd:SetWndPos(pos)
+	
+	FitInRect(self.hint_wnd,Frect():set(0,0,1024,768),0,100)
+end
+
+function warfare_options_new:Update()
+	CUIScriptWnd.Update(self)
+
+	if (self.hints) then
+		for k,v in pairs(self.hints) do
+			if (v.control and v.control:IsCursorOverWindow()) then
+				self:SetHint(v.hint)
+				return
+			end
+		end
+	end
+
+	self.hint_wnd:Show(false)
+end
+
+function warfare_options_new:AddHint(control, hint)
+	if not (self.hints) then
+		self.hints = {}
+	end
+
+	self.hints[#self.hints+1] = { control = control, hint = hint }
+end
+
+function warfare_options_new:cmb_tab_item_selected()
+	local current = self.cmb_tab:CurrentID()
+	local id = self.cmb_tab.items[current + 1]
+	local t = "Warfare Options - "
+
+	for k,v in pairs(self.option_dialogs) do
+		v:Show(false)
+	end
+
+	if (id == "General") then
+		self.dialog_title:SetText(t.."General Settings")
+		self.option_dialogs["general"]:Show(true)
+	elseif (id == "Stalker") then		
+		self.dialog_title:SetText(t.."Stalker Settings")
+		self.option_dialogs["stalker"]:Show(true)
+	elseif (id == "Bandit") then
+		self.dialog_title:SetText(t.."Bandit Settings")
+		self.option_dialogs["bandit"]:Show(true)
+	elseif (id == "Clear Sky") then
+		self.dialog_title:SetText(t.."Clear Sky Settings")
+		self.option_dialogs["csky"]:Show(true)
+	elseif (id == "Military") then
+		self.dialog_title:SetText(t.."Military Settings")
+		self.option_dialogs["army"]:Show(true)
+	elseif (id == "Freedom") then
+		self.dialog_title:SetText(t.."Freedom Settings")
+		self.option_dialogs["freedom"]:Show(true)
+	elseif (id == "Duty") then
+		self.dialog_title:SetText(t.."Duty Settings")
+		self.option_dialogs["dolg"]:Show(true)
+	elseif (id == "Ecologist") then
+		self.dialog_title:SetText(t.."Ecologist Settings")
+		self.option_dialogs["ecolog"]:Show(true)
+	elseif (id == "Mercenary") then
+		self.dialog_title:SetText(t.."Mercenary Settings")
+		self.option_dialogs["killer"]:Show(true)
+	elseif (id == "Monolith") then
+		self.dialog_title:SetText(t.."Monolith Settings")
+		self.option_dialogs["monolith"]:Show(true)
+	elseif (id == "Zombified Stalkers") then
+		self.dialog_title:SetText(t.."Zombified Stalker Settings")
+		self.option_dialogs["zombied"]:Show(true)
+	end
+end
+
+function warfare_options_new:add_break()
+	local st = xml:InitStatic("templ_item", nil)
+	local txt = xml:InitEditBox("txt_template", st)
+	local label = "-----------------------"
+	txt:Enable(false)
+	txt:SetText(label)
+	self.scroll_v:AddWindow(st, true)
+end
+
+function warfare_options_new:add_label(lbl)
+	local st = xml:InitStatic("templ_item", nil)
+	local txt = xml:InitEditBox("txt_template", st)		
+	local label = lbl
+	txt:Enable(false)
+	txt:SetText(label)		
+	self.scroll_v:AddWindow(st, true)
+end
+
+function warfare_options_new:add_edit(label, default, variable, f)
+	local st = xml:InitStatic("template_item", nil)
+	local txt = xml:InitEditBox("txt_template", st)	
+	local edt = xml:InitEditBox("edt_template", st)
+	
+	local def = nil
+	
+	if (f) then
+		def = warfare_options.config:r_value("warfare_options", f.."_"..variable, 0, default or "0")
+	else	
+		def = warfare_options.config:r_value("warfare_options", variable, 0, default or "0")
+	end
+		
+	txt:Enable(false)
+	txt:SetText(label)
+	
+	edt:Enable(true)
+	edt:SetText(def)
+	edt.variable = variable
+	
+	self.scroll_v:AddWindow(st, true)
+	
+	if (variable ~= "") then
+		if not (f) then
+			self.edits[variable] = edt --variable
+		else
+			
+			if not (self.factions[f]) then
+				self.factions[f] = {}
+			end
+			
+			self.factions[f][variable] = edt
+		end
+	end
+	
+	return edt
+end
+
+function warfare_options_new:add_button(text, onClick)
+	if not (self.buttons) then
+		self.buttons = {}
+	end
+
+	local i = #self.buttons
+	local st = xml:InitStatic("template_item", nil)
+	local btn = xml:Init3tButton("btn_template", st)
+	self:Register(btn, "btn_template_"..i)
+	self:AddCallback("btn_template_"..i, ui_events.BUTTON_CLICKED, onClick, self)
+end
+
+function warfare_options_new:add_check(label, default, variable)
+	local st = xml:InitStatic("template_item", nil)
+	local txt = xml:InitEditBox("txt_template", st)
+	local chk = xml:InitCheck("chk_template", st)
+	local def = warfare_options.config:r_value("warfare_options", variable, 1, default)
+	
+	txt:Enable(false)
+	txt:SetText(label)
+	chk:SetCheck(def)	
+	chk.variable = variable
+	chk.typ = 1
+	chk.txt = label
+	self.scroll_v:AddWindow(st, true)
+	
+	self.checks[variable] = chk
+	
+	return chk
+end
+
+function warfare_options_new:btn_accept_clicked()
+	for t, dlg in pairs(self.option_dialogs) do
+		dlg:save_dialog()
+	end 
+
+	warfare_options.save_options()
+	
+	self.owner:ShowDialog(true)
+	self.owner:Show(true)
+end
+
+function warfare_options_new:save_check(chk)
+	warfare_options.options[chk.variable] = chk:GetCheck()
+end
+
+function warfare_options_new:save_edit(cmb, f)
+	if not (f) then		
+		warfare_options.options[cmb.variable] = cmb:GetText()
+	else		
+		warfare_options.options.factions[f][cmb.variable] = cmb:GetText()
+	end
+end
+
+function warfare_options_new:save_edit(edt, f)
+	if not (f) then		
+		warfare_options.options[edt.variable] = edt:GetText()
+	else		
+		warfare_options.options.factions[f][edt.variable] = edt:GetText()
+	end
+end
+
+function warfare_options_new:btn_cancel_clicked()
+	self.owner:ShowDialog(true)
+	self:HideDialog()
+	self.owner:Show(true)
+end

@@ -1,0 +1,134 @@
+class "warfare_options_general" (CUIWindow)
+function warfare_options_general:__init() super()
+end
+
+function warfare_options_general:__finalize()
+
+end
+
+function warfare_options_general:InitControls(x, y, xml, parent)
+	self.xml = xml
+	self.parent = parent
+	self.checks = {}
+	self.edits = {}
+	self.scroll_v = xml:InitScrollView("scroll_v", self)
+	self.hints = {}
+
+    self:SetWndPos(vector2():set(x, y))
+    self:SetWndSize(vector2():set(738, 416))
+    self:SetAutoDelete(true)
+	
+	self:add_check("All out war", false, "all_out_war")
+	self:add_check("Random starting locations", false, "random_starting_locations")
+	self:add_check("Random starting character", false, "random_starting_character")
+	self:add_edit("Random stalker chance", "75", "random_stalker_chance")
+	self:add_edit("Random mutant chance", "50", "random_monster_chance")
+	self:add_check("Enable auto capture", true, "enable_auto_capture")
+	self:add_edit("Auto capture max distance", "50", "auto_capture_max_distance")
+	self:add_edit("Auto capture wait time", "15", "auto_capture_wait_time")
+	self:add_check("Enable fog of war", true, "fog_of_war")
+	self:add_edit("Fog of war distance", "100", "fog_of_war_distance")
+	self:add_check("Hide unfriendly squads", false, "hide_unfriendly_squads")
+	self:add_check("Hide smarts", false, "hide_smarts")
+	self:add_check("Hide underground smarts", true, "hide_undergraund_smarts")
+
+	self:add_check("Enable enemy bonus starting squads", false, "enemy_new_game_bonus")
+	self:add_edit("Enemy resource boost", "0", "enemy_resource_boost")
+	self:add_edit("Enemy base boost", "0", "enemy_base_boost")
+	
+	self:add_edit("Actor influence weight", "15", "actor_influence_weight")
+    self:add_edit("Support novice squad price", "1000", "novice_squad_price")
+    self:add_edit("Support advanced squad price", "2000", "advanced_squad_price")
+    self:add_edit("Support veteran squad price", "32000", "veteran_squad_price")
+    self:add_edit("Support helicopter price", "64000", "heli_price")
+    self:add_edit("Support reward enemy rank weight", "1", "actor_support_enemy_rank_weight")
+    self:add_edit("Support reward money", "100", "actor_support_reward_money")
+    self:add_edit("Support reward influence", "0.2", "actor_support_reward_influence")
+
+	self:add_edit("Maximum mutant squads per level", "4", "monster_max_squads_per_level")
+	self:add_edit("Minimum mutant respawn", "40", "monster_min_faction_respawn")
+	self:add_edit("Maximum mutant respawn", "180", "monster_max_faction_respawn")    
+
+	self:add_check("Zombies act as a faction", false, "zombies_act_as_faction")
+    self:add_check("Disable offline combat", false, "disable_offline_combat")
+	self:add_check("Simulate offline combat at smarts", false, "simulate_offline_combat_at_smarts")
+    self:add_check("Enable mutant offline combat", false, "enable_mutant_offline_combat")
+	self:add_check("Enable offline news events", true, "enable_offline_news")
+	self:add_edit("Offline news display percentage", "5", "offline_news_display_percentage")
+
+	self:add_check("Disable smart population cap", false, "disable_smart_pop_cap")
+		
+    self:add_check("Debug logging (inflates log file)", false, "debug_logging")
+end
+
+function warfare_options_general:save_dialog()
+	for var,chk in pairs(self.checks) do
+		self:save(chk)
+	end
+	
+	for var,edt in pairs(self.edits) do
+		self:save(edt)
+	end
+end
+
+function warfare_options_general:save(cmb)
+	if (cmb.GetCheck) then
+		warfare_options.options[cmb.variable] = cmb:GetCheck()
+	else
+		warfare_options.options[cmb.variable] = cmb:GetText()
+	end
+end
+
+function warfare_options_general:add_check(label, default, variable)
+	local st = self.xml:InitStatic("template_item", nil)
+	local txt = self.xml:InitEditBox("txt_template", st)
+	local chk = self.xml:InitCheck("chk_template", st)
+	local def = warfare_options.config:r_value("warfare_options", variable, 1, default)
+	
+	txt:Enable(false)
+	txt:SetText(variable)
+	chk:SetCheck(def)	
+	chk.variable = variable
+	chk.typ = 1
+	chk.txt = label
+	self.scroll_v:AddWindow(st, true)
+	
+	self.checks[variable] = chk
+
+	if (ui_warfare_options_hints.option_hints[variable]) then
+		self.parent:AddHint(txt, ui_warfare_options_hints.option_hints[variable])
+	end
+	
+	return chk
+end
+
+function warfare_options_general:add_edit(label, default, variable, f)
+	local st = self.xml:InitStatic("template_item", nil)
+	local txt = self.xml:InitEditBox("txt_template", st)	
+	local edt = self.xml:InitEditBox("edt_template", st)
+	
+	local def = nil
+	
+	if (f) then
+		def = warfare_options.config:r_value("warfare_options", f.."_"..variable, 0, default or "0")
+	else	
+		def = warfare_options.config:r_value("warfare_options", variable, 0, default or "0")
+	end
+		
+	txt:Enable(false)
+	txt:SetText(variable)
+	
+	edt:Enable(true)
+	edt:SetText(def)
+	edt.variable = variable
+	
+	self.scroll_v:AddWindow(st, true)
+	
+	self.edits[variable] = edt
+
+	if (ui_warfare_options_hints.option_hints[variable]) then
+		self.parent:AddHint(txt, ui_warfare_options_hints.option_hints[variable])
+	end
+	
+	return edt
+end

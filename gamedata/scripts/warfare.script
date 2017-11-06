@@ -1,0 +1,964 @@
+-- werejew
+
+-- this file is going to be used to determine faction stats such as respawn times for now.
+-- over time, more and more will be shifted over to smart_terrain_warfare.script.
+
+--_G.DEACTIVATE_SIM_ON_NON_LINKED_LEVELS = false
+_G.ProcessEventQueueState = function() return end
+--[[
+axr_keybind.keybinds["warfare_hide_smarts"] = "DIK_M"
+function axr_keybind.action.warfare_hide_smarts(p)
+	if (p == 1) then
+		smart_terrain_warfare.hide_smarts = not smart_terrain_warfare.hide_smarts
+	end	
+end
+
+axr_keybind.keybinds["warfare_debug_info"] = "DIK_L"
+function axr_keybind.action.warfare_debug_info(p)
+	if (p == 1) then
+		local actor = alife():actor()
+		local lvid = actor.m_level_vertex_id
+		local gvid = actor.m_game_vertex_id
+		local x = actor.position.x
+		local y = actor.position.y
+		local z = actor.position.z
+
+		printf("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+		printf("	LVID 	= 	"..tostring(lvid))
+		printf("	GVID	=	"..tostring(gvid))
+		printf("	X		=	"..tostring(x))
+		printf("	y		=	"..tostring(y))
+		printf("	z		=	"..tostring(z))
+		printf("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+	end
+end]]
+
+squad_community_by_behaviour["trader"] = "trader"
+
+warfare_debug = true
+
+actor_faction = nil
+actor_influence_points = 0
+influence_levels = {} -- influence_levels[smart_terrain_id] = influence_level if > 0 or nil
+
+base_count = 0
+resource_count = 0
+level_count = 32
+initialized = false
+
+-- Variable to see if all_out_war was applied at the start of a new game (maintain compatibility with dynamic relations)
+all_out_war_applied = false
+
+-- Variable to see if all_out_war was applied after loading a save.
+need_all_out_war_applied = true
+dynamic_relations_installed = false
+
+function apply_all_out_war()
+	for i,faction in pairs(warfare_factions.factions) do
+		for j,faction2 in pairs(warfare_factions.factions) do
+			if (faction ~= faction2) then
+				game_relations.set_factions_community(faction, faction2, -4000)
+				
+				if (dynamic_relations_installed) then
+					alun_utils.save_var( db.actor, ("drx_df_" .. faction .. "_" .. faction2 .. "_relations"), -4000)
+					alun_utils.save_var( db.actor, ("drx_df_" .. faction .. "_" .. faction2 .. "_relations"), -4000)
+				end
+				
+				if (actor_faction == faction) then
+					game_relations.set_factions_community("actor_"..faction, faction2, -4000)
+				elseif (actor_faction == faction2) then
+					game_relations.set_factions_community(faction, "actor_"..faction2, -4000)
+				end
+			end
+		end
+	end
+end
+
+-- table for registered squad ids
+registered_squads = {
+	stalker = {},	
+	bandit = {},	
+	csky = {},	
+	army = {},	
+	freedom = {},	
+	dolg = {},	
+	ecolog = {},	
+	killer = {},	
+	monolith = {},
+	monster = {},
+	zombied = {},
+}
+
+-- save warfare state
+function save_state(m_data)
+
+	-- if data doesn't exist, create it.
+	if (not m_data.warfare) then
+		m_data.warfare = {}
+		m_data.warfare.squads = {}
+		m_data.warfare.smart_owners = {}
+	end	
+
+    m_data.warfare.actor_influence_points = actor_influence_points
+    m_data.warfare.influence_levels = influence_levels
+	m_data.warfare.all_out_war_applied = all_out_war_applied
+	m_data.warfare.manual_control = pda_actor.manual_control
+	m_data.warfare.manual_point = smart_terrain_warfare.manual_point
+	m_data.warfare.invasions = smart_terrain_warfare.invasions
+	m_data.warfare.player_heli = warfare_faction_control.player_heli
+	m_data.warfare.defense_timers = smart_terrain_warfare.defense_timers
+	m_data.warfare.defense_next_update = smart_terrain_warfare.defense_next_update
+	m_data.warfare.patrol_timers = smart_terrain_warfare.patrol_timers
+	m_data.warfare.patrol_next_update = smart_terrain_warfare.patrol_next_update
+	m_data.warfare.patrol_squads = smart_terrain_warfare.patrol_squads
+	m_data.warfare.faction_information = warfare_factions.faction_information
+
+	for k,v in pairs(smart_terrain_warfare.random_patrols) do
+		local squad = alife_object(k)
+
+		if (squad) then
+			if (squad:clsid() ~= online_offline_group_s) then
+				smart_terrain_warfare.random_patrols[k] = nil
+			end
+		end
+	end
+
+	m_data.warfare.random_patrols = smart_terrain_warfare.random_patrols
+
+	-- iterate over the faction tables in registered_squads
+	for faction,tbl in pairs(registered_squads) do		
+		if not m_data.warfare.squads[faction] then
+			m_data.warfare.squads[faction] = {}
+		end
+	
+		-- iterate over the squad ids in the faction table
+		for ID,target in pairs(tbl) do
+			m_data.warfare.squads[faction][ID] = target
+		end
+	end
+	
+	for smart,faction in pairs(smart_terrain_warfare.smart_owners) do
+		m_data.warfare.smart_owners[smart] = faction
+	end
+end
+
+loaded_squads = false
+
+function load_state(m_data)
+	-- if warfare data isn't saved, return early.
+	if (not m_data.warfare) then
+		return
+	end
+	
+	actor_influence_points = m_data.warfare.actor_influence_points or 0
+	influence_levels = m_data.warfare.influence_levels or {}
+	all_out_war_applied = m_data.warfare.all_out_war_applied or false
+	pda_actor.manual_control = m_data.warfare.manual_control or false
+	smart_terrain_warfare.manual_point = m_data.warfare.manual_point
+		
+	smart_terrain_warfare.invasions = m_data.warfare.invasions or {}
+	warfare_faction_control.player_heli = m_data.warfare.player_heli
+
+	smart_terrain_warfare.defense_timers = m_data.warfare.defense_timers or {}
+	smart_terrain_warfare.defense_next_update = m_data.warfare.defense_next_update or {}
+	smart_terrain_warfare.patrol_timers = m_data.warfare.patrol_timers or {}
+	smart_terrain_warfare.patrol_next_update = m_data.warfare.patrol_next_update or {}
+	smart_terrain_warfare.patrol_squads = m_data.warfare.patrol_squads or {}
+	smart_terrain_warfare.random_patrols = m_data.warfare.random_patrols or {}
+
+	for smart,squads in pairs(m_data.warfare.patrol_squads) do
+		for squad_id, tbl in pairs(squads) do			
+			if type(tbl) == "number" then			
+				smart_terrain_warfare.patrol_squads[smart][squad_id] = {
+					target = tbl,
+					arrive_time = nil,
+					stay_time = nil
+				}
+			end
+		end
+	end
+
+	warfare_factions.faction_information = m_data.warfare.faction_information or {}
+	
+	for faction,tbl in pairs(m_data.warfare.squads) do		
+		for ID,target in pairs(tbl) do
+			registered_squads[faction][ID] = target
+			loaded_squads = true
+		end
+	end
+	
+	if (m_data.warfare.smart_owners) then
+		for smart,faction in pairs(m_data.warfare.smart_owners) do
+			smart_terrain_warfare.smart_owners[smart] = faction
+		end
+	end
+	
+	if (m_data.warfare.point_cap_timers) then
+		for smart,timer in pairs(m_data.warfare.point_cap_timers) do
+			smart_terrain_warfare.point_cap_timers[smart] = timer
+		end
+	end
+	
+	-- clear old data.
+	m_data.warfare = nil
+end
+
+-- callback for when npcs are created for a squad, done in create_squad for sim_board.
+function squad_on_npc_creation(squad,se_obj,spawn_smart)
+	----printf("--- squad_on_npc_creation ---")
+
+	-- Ignore any squads in the ignore list.
+	if not (ignore[squad:section_name()]) then
+		if (not squad.registered_with_warfare) then
+			----printf("!!! registering " .. squad:section_name() .. " with warfare")
+		
+			-- get the squads faction
+			local faction = squad:get_squad_community()
+			
+			if (registered_squads[faction]) then
+				----printf("--- registering squad " .. squad:section_name() .. " for " .. faction .. " with target: " .. spawn_smart:name() .. " ---")
+				registered_squads[faction][squad.id] = spawn_smart.id
+				squad.assigned_target_id = spawn_smart.id
+				squad.registered_with_warfare = true
+				spawn_smart:on_reach_target(squad)
+			end
+		else
+			----printf("--- Already registered squad ---")
+		end
+	end
+end
+
+-- last update time
+local last_update
+
+-- callback for the actors update method
+function actor_on_update()
+	-- get the current time
+	local tg = time_global()
+	
+	if not actor_faction then
+		actor_faction = alife():actor():community():sub(7)
+
+		if (warfare_options.options.all_out_war) then
+			for i,f in pairs(warfare_factions.factions) do
+				for j,f2 in pairs(warfare_factions.factions) do
+					if f ~= f2 then
+						game_relations.set_factions_community_num(f, f2, -5000)
+					end
+				end
+			end
+		end
+
+		for name,smart in pairs(SIMBOARD.smarts_by_names) do
+			if (not smart.level_id) then
+				smart.level_id = game_graph():vertex(smart.m_game_vertex_id):level_id()
+			end
+			
+			if (not warfare_levels.level_information[smart.level_id]) then
+				warfare_levels.level_information[smart.level_id] = {}
+				warfare_levels.level_information[smart.level_id].smarts = {}
+				warfare_levels.level_information[smart.level_id].faction_priority = {}
+				warfare_levels.level_information[smart.level_id].base_count = 0 
+				warfare_levels.level_information[smart.level_id].resource_count = 0
+				warfare_levels.level_information[smart.level_id].territory_count = 0
+				warfare_levels.level_information[smart.level_id].lair_count = 0
+				warfare_levels.level_information[smart.level_id].first_update = true
+			end
+			
+			if (smart.props) then
+				table.insert(warfare_levels.level_information[smart.level_id].smarts, smart.id)
+				
+				if smart.props then
+
+					-- Count the total number of smart terrain types in the level; will be used in level analysis
+					if smart.props.base > 0 then
+						warfare_levels.level_information[smart.level_id].base_count = warfare_levels.level_information[smart.level_id].base_count + 1
+						base_count = base_count + 1
+					elseif smart.props.territory > 0 then
+						warfare_levels.level_information[smart.level_id].territory_count = warfare_levels.level_information[smart.level_id].territory_count + 1
+					end
+					
+					if smart.props.resource > 0 then
+						warfare_levels.level_information[smart.level_id].resource_count = warfare_levels.level_information[smart.level_id].resource_count + 1
+						resource_count = resource_count + smart.props.resource
+					end
+					
+					if smart.props.lair > 0 then
+						warfare_levels.level_information[smart.level_id].lair_count = warfare_levels.level_information[smart.level_id].lair_count + 1
+					end
+				
+					-- Cycle through factions
+					for i,f in pairs(warfare_factions.factions) do
+						-- check if smart is flagged for faction
+						if smart.props[f] and smart.props[f] > 0 then
+							if not warfare_levels.level_information[smart.level_id].faction_priority[f] then
+								warfare_levels.level_information[smart.level_id].faction_priority[f] = 0
+							end
+							
+							warfare_levels.level_information[smart.level_id].faction_priority[f] = warfare_levels.level_information[smart.level_id]["faction_priority"][f] + smart.props[f]
+						end
+					end		
+				end
+			end
+		end
+	end
+
+	-- if last update time doesn't exist, set it.
+	if (not last_update) then
+		last_update = tg + 10000
+	end
+	
+	if (tg < last_update) then
+		return
+	end
+    
+    printd(0)
+	
+	-- Update faction to account for switching factions or azazel mode.
+	actor_faction = alife():actor():community():sub(7)
+
+	-- set new update time
+	last_update = tg + 10000
+	
+	if (not initialized) then
+		if (game_relations.drx_df_changeable_factions_list) then
+			dynamic_relations_installed = true
+		end
+		
+		if (dynamic_relations_installed) then
+			if (not all_out_war_applied and warfare_options.options.all_out_war) then
+				apply_all_out_war()
+				all_out_war_applied = true
+			end
+		elseif (warfare_options.options.all_out_war) then
+			apply_all_out_war()
+		end
+	
+		initialize()
+		warfare_levels.update()		
+		warfare_factions.update()
+		
+		if (warfare_options.options.random_starting_locations) then
+			if (not loaded_squads) then
+				local id = smart_terrain.nearest_to_actor_smart.id				
+				local starting_smarts = {}
+				local used_smarts = {}
+				
+				if (id) then
+					local s = alife_object(id)
+					local level = game_graph():vertex(s.m_game_vertex_id):level_id()
+					local off = level_targets.level_offsets[level]
+					
+					if (off) then					
+						local pos = s.position
+						local gpos = vector():set(pos.x + off[1], pos.y + off[2], pos.z + off[3])
+						s.global_position = gpos
+						
+						local smarts = SIMBOARD.smarts_by_names
+						local smarts2 = hash_table_to_array(smarts)
+						shuffleTable(smarts2)
+						
+						local currentDist = nil
+						local currentSmart = nil
+
+						for _,t in pairs(smarts2) do
+							local s2 = t.value
+							
+							local dist = nil
+							
+							if (s2.global_position) then
+								dist = distance_to_xz_sqr(s.global_position, s2.global_position)
+								
+								if (s2.props and s2.props.base > 0) then
+									if (currentDist == nil or dist < currentDist) then
+										currentDist = dist
+										currentSmart = s2
+									end
+								end
+							else
+								local level2 = game_graph():vertex(s2.m_game_vertex_id):level_id()
+								local off2 = level_targets.level_offsets[level2]
+								local pos2 = s2.position
+								
+								if (off2 and s2.props and s2.props.base > 0) then
+									local gpos2 = vector():set(pos2.x + off2[1], pos2.y + off2[2], pos2.z + off2[3])
+									s2.global_position = gpos2
+									
+									dist = distance_to_xz_sqr(pos2, gpos2)
+									
+									if (currentDist == nil or dist < currentDist) then
+										currentDist = dist
+										currentSmart = s2
+									end
+								end
+							end
+						end
+						
+						starting_smarts[actor_faction] = { smart=currentSmart, p=gpos, }
+						used_smarts[currentSmart.id] = true
+						local resources = warfare_factions.faction_information[actor_faction].resource_count
+						local section = faction_expansions.get_spawn_section(actor_faction, resources)
+						local squad = alun_utils.create_squad(section, currentSmart:name())
+						sim_squad_warfare.set_target(squad, currentSmart.id)
+					end
+				end				
+	
+				local stalker_pop_factor = (axr_main.config:r_value("mm_options","alife_stalker_pop",2) or 1)
+				local monster_pop_factor = (axr_main.config:r_value("mm_options","alife_mutant_pop",2) or 1)
+				
+				for _,f in pairs(warfare_factions.factions) do				
+					if (f ~= actor_faction) then
+						local smarts = SIMBOARD.smarts_by_names
+						local smarts2 = hash_table_to_array(smarts)
+						shuffleTable(smarts2)
+						
+						for __,t in pairs(smarts2) do
+							local s = t.value
+							local level = game_graph():vertex(s.m_game_vertex_id):level_id()
+							local off = level_targets.level_offsets[level]
+							
+							if (off and s.props and s.props.base > 0) then					
+								local pos = s.position
+								local gpos = vector():set(pos.x + off[1], pos.y + off[2], pos.z + off[3])
+								local safe = true
+								
+								for f2,t2 in pairs(starting_smarts) do
+									local dist = gpos:distance_to_sqr(t2.p)
+									
+									if (dist < 160000) then
+										safe = false
+									end
+								end
+								
+								if (safe) then
+									starting_smarts[f] = { smart=s, p=gpos, }
+									used_smarts[s.id] = true
+									s.global_position = gpos					
+									
+									for p=1,math.max(1, s.max_population*stalker_pop_factor) do
+										local section = faction_expansions.get_spawn_section(f, math.random(resource_count*(0.1 + math.random()*0.65)))
+										local squad = alun_utils.create_squad(section, s:name())
+										sim_squad_warfare.set_target(squad, s.id)
+									end
+									
+									break
+								end
+							end
+						end
+					end
+				end
+				
+				for name,smart in pairs(SIMBOARD.smarts_by_names) do
+					if (smart.props) then
+						if (smart.props.base > 0) then
+							if not (used_smarts[smart.id]) then	
+								local f = {}
+								
+								for _,faction in pairs(warfare_factions.factions) do
+									local flag = smart.props[faction] or 0
+									flag = flag * 3
+									
+									-- Every faction will get a chance to spawn, but those with the smart terrain flagged for them will be considered more.
+									f[#f+1] = faction
+											
+									if (flag > 0) then
+									
+										for i=1,flag do
+										
+											f[#f+1] = faction
+										end
+									end
+								end
+								
+								f = f[math.random(#f)]
+								
+								for p=1,math.max(1, smart.max_population*stalker_pop_factor) do
+									if (math.random(100) <= warfare_options.options.random_stalker_chance) then
+										local section = faction_expansions.get_spawn_section(f, math.random(resource_count*(0.1 + math.random()*0.65)))
+										local squad = alun_utils.create_squad(section, smart:name())
+										sim_squad_warfare.set_target(squad, smart.id)
+									end
+								end
+							end
+						elseif (smart.props.resource > 0) then
+							local f = {}
+							
+							for _,faction in pairs(warfare_factions.factions) do
+								local flag = smart.props[faction] or 0
+								flag = flag * 3
+								
+								-- Every faction will get a chance to spawn, but those with the smart terrain flagged for them will be considered more.
+								f[#f+1] = faction
+										
+								if (flag > 0) then
+									for i=1,flag do
+										f[#f+1] = faction
+									end
+								end
+							end
+								
+							f = f[math.random(#f)]
+							
+							for p=1,math.max(1, smart.max_population*stalker_pop_factor) do
+								if (math.random(100) <= warfare_options.options.random_stalker_chance) then
+									local section = faction_expansions.get_spawn_section(f, math.random(resource_count*(0.1 + math.random()*0.65)))
+									local squad = alun_utils.create_squad(section, smart:name())
+									sim_squad_warfare.set_target(squad, smart.id)
+								end
+							end
+						elseif (smart.props.territory > 0) then
+							if (math.random(100) <= warfare_options.options.random_monster_chance) then
+								local section = faction_expansions.get_spawn_section("monster", math.random(resource_count))
+								local squad = alun_utils.create_squad(section, smart:name())
+								sim_squad_warfare.set_target(squad, smart.id)
+							end
+						end
+					end
+				end
+				
+				return
+			end
+		end
+
+		
+	end
+	
+	warfare_levels.update()
+	warfare_factions.update()
+
+    printd(1)
+end
+
+function initialize()
+	----printf("--- initializing warfare ---")
+		
+	-- At this point this just serves to pause everything to ensure squads reach their "waiting at target" state before resource counts etc are calculated.
+	initialized = true
+	
+	--[[for lvl,tbl in pairs(warfare_levels.level_information) do
+		for f,p in pairs(tbl["faction_priority"]) do
+			----printf(game.translate_string(alife():level_name(lvl)) .. " priority for " .. game.translate_string(f) .. " = " .. p)
+		end
+	end]]
+end
+
+warfare_positions_filled = false
+
+FACTION_TERRITORY_RADIUS = 100
+
+function shuffleTable( t )
+    local rand = math.random 
+    local iterations = #t
+    local j
+    
+    for i = iterations, 2, -1 do
+        j = rand(i)
+        t[i], t[j] = t[j], t[i]
+    end
+end
+
+-- for vanilla, probably create a custom simulation.ltx 
+function fill_start_position()
+	if (SIMBOARD.start_position_filled) then
+		return
+	end
+	
+	SIMBOARD.start_position_filled = true
+	
+	local setting_ini
+	setting_ini = ini_file("misc\\simulation.ltx")
+	
+	local stalker_pop_factor = (axr_main.config:r_value("mm_options","alife_stalker_pop",2) or 1)
+	local monster_pop_factor = (axr_main.config:r_value("mm_options","alife_mutant_pop",2) or 1)
+		
+	local result, squad_section, count, li, lc
+	-- enemy_new_game_bonus
+	local ene_bonus = warfare_options.options.enemy_new_game_bonus
+	local actor_faction
+	if ene_bonus then
+		local config = axr_main.config
+		if not (config) then
+			return
+		end
+	    actor_faction = config:r_value("character_creation","new_game_faction",3)
+	end
+	setting_ini:section_for_each(function(section)
+		lc = setting_ini:line_count(section)
+		for li=0,lc-1 do
+			local smart = SIMBOARD.smarts_by_names[section]
+			if (smart) then
+				result, squad_section, count = setting_ini:r_line(section,li,"","")
+				count = tonumber(count) or 1
+				
+				if (ignore[squad_section] or not warfare_options.options.random_starting_locations) then					
+					if (string.find(squad_section,"sim_squad")) then
+						count = count*stalker_pop_factor
+						if (count == 0.5) then -- just randomly 0 or 1 instead of always rounding to 1
+							count = math.random(1,2)
+						else 
+							count = utils.round(count)
+						end
+						-- reduce the starting amount of squads from actor's faction and factions neutral to actor's faction and spawn more squads from factions that are enemies with actor's faction(optional)
+						if (ene_bonus and actor_faction) then
+							if (string.find(squad_section,actor_faction) or not warfare.is_squad_section_enemy_of_faction(squad_section, actor_faction)) then 
+								--printf("actor's faction is %s", actor_faction)
+								if (count >= 1) then
+									if (math.random() < 0.5) then
+										count = count - 1
+									end
+								end
+							else
+								--if (math.random() < 0.5) then
+									count = count + 1
+								--end
+							end
+						end
+					elseif (string.find(squad_section,"simulation")) then
+						count = count*monster_pop_factor
+						if (count == 0.5) then 
+							count = math.random(0,1)
+						else 
+							count = utils.round(count)
+						end
+					end
+						
+					for i=1,count do
+						squad = SIMBOARD:create_squad(smart,squad_section)
+
+						if smart and squad and registered_squads[squad:get_squad_community()] and not ignore[squad:section_name()] then
+							sim_squad_warfare.set_target(squad, smart.id)
+						else
+							----printf("smart=%s, squad=%s, ignore=%s", tostring(smart:name()), tostring(squad:name()))
+						end
+					end
+				end
+			end
+		end
+	end)
+end
+
+-- linear interpolation function
+function lerp(a, b, f)
+	if (a ~= nil and b ~= nil and f ~= nil) then
+		return (1 - f) * a + (f * b)
+	else
+		return a or b or 0
+	end
+end
+
+-- table shuffle function
+function shuffle(t)
+    local rand = math.random 
+    local iterations = #t
+    local j
+    
+    for i = iterations, 2, -1 do
+        j = rand(i)
+        t[i], t[j] = t[j], t[i]
+    end
+end
+
+-- Special squads to ignore in offline combat and to ignore when assigning targets
+ignore = {
+	["agr_smart_terrain_1_6_army_mechanic_stalker_squad"] = true,
+	["agr_smart_terrain_1_6_army_trader_stalker_squad"] = true,
+	["agr_smart_terrain_1_6_near_2_military_colonel_kovalski_squad"] = true,
+	["bar_dolg_leader_squad"] = true,
+	["bar_dolg_general_petrenko_stalker_squad"] = true,
+	["bar_dolg_general_zoneguard_stalker_squad"] = true,
+	["bar_arena_manager_squad"] = true,
+	["bar_visitors_barman_stalker_trader_squad"] = true,
+	["bar_visitors_cardan_tech_squad"] = true,
+	["bar_visitors_garik_stalker_guard_squad"] = true,
+	["bar_visitors_zhorik_stalker_guard2_squad"] = true,	
+	["bun_krovosos_nest_squad"] = true,
+	["cit_killers_merc_mechanic_stalker_squad"] = true,
+	["cit_killers_merc_trader_stalker_squad"] = true,
+	["esc_2_12_stalker_fanat_squad"] = true,
+	["esc_2_12_stalker_nimble_squad"] = true,
+	["esc_2_12_stalker_wolf_squad"] = true,
+	["esc_smart_terrain_5_7_loner_mechanic_stalker_squad"] = true,
+	["jup_a12_bandit_chief_squad"] = true,
+	["jup_a6_freedom_leader_squad"] = true,
+	["jup_a6_freedom_trader_ashot_squad"] = true,
+	["jup_a6_stalker_medik_squad"] = true,
+	["jup_a6_stalker_barmen_squad"] = true,
+	["jup_b19_freedom_yar_squad"] = true,
+	["jup_b25_alex_squad"] = true,
+	["zat_b30_owl_stalker_trader_squad"] = true,
+	["zat_b22_medic"] = true,
+	["zat_b22_barman"] = true,
+	["zat_b22_barmen"] = true,
+	["zat_a2_stalker_mechanic_squad"] = true,
+	["yan_stalker_sakharov_squad"] = true,
+	["zat_b7_bandit_boss_sultan_squad"] = true,
+	["val_smart_terrain_7_4_bandit_trader_stalker_squad"] = true,
+	["val_smart_terrain_7_3_bandit_mechanic_stalker_squad"] = true,
+	["pri_monolith_monolith_mechanic_stalker_squad"] = true,
+	["pri_monolith_monolith_trader_stalker_squad"] = true,
+	["mil_smart_terrain_7_7_freedom_mechanic_stalker_squad"] = true,
+	["mil_smart_terrain_7_10_freedom_trader_stalker_squad"] = true,
+	["mar_base_owl_stalker_trader_squad"] = true,
+	["mar_base_stalker_barmen_squad"] = true,
+	["mar_base_stalker_tech_squad"] = true,
+	["mar_doctor_squad"] = true,
+	["mar_smart_terrain_doc_squad"] = true,
+	["mar_smart_terrain_base_dog_doctor_squad"] = true,
+	["mar_smart_terrain_base_lager_squad"] = true,
+	["mar_smart_terrain_base_stalker_leader_marsh_squad"] = true,
+	["mil_smart_terrain_7_7_freedom_leader_stalker_squad"] = true,
+	["zat_b106_stalker_crab_squad"] = true,
+	["zat_b106_stalker_gonta_squad"] = true,
+	["zat_b7_stalkers_raiders"] = true,
+	["mar_base_stalker_barmen"] = true,
+	["stalker_sim_squad_trader"] = true,
+	["stalker_sim_squad_mechanic"] = true,
+	["bandit_sim_squad_trader"] = true,
+	["bandit_sim_squad_mechanic"] = true,
+	["merc_sim_squad_trader"] = true,
+	["merc_sim_squad_mechanic"] = true,
+	["dolg_sim_squad_trader"] = true,
+	["dolg_sim_squad_mechanic"] = true,
+	["freedom_sim_squad_trader"] = true,
+	["freedom_sim_squad_mechanic"] = true,
+	["army_sim_squad_trader"] = true,
+	["army_sim_squad_mechanic"] = true,
+	["ecolog_sim_squad_trader"] = true,
+	["ecolog_sim_squad_mechanic"] = true,
+	["csky_sim_squad_trader"] = true,
+	["csky_sim_squad_mechanic"] = true,
+	["monolith_sim_squad_trader"] = true,
+	["monolith_sim_squad_mechanic"] = true,
+	-- xQd start- added hostage squads
+	["hostage_companion_task_1_stalker"] = true,
+	["hostage_companion_task_1_ecolog"] = true,
+	["hostage_companion_task_1_bandit"] = true,
+	["hostage_companion_task_1_csky"] = true,
+	["hostage_companion_task_1_dolg"] = true,
+	["hostage_companion_task_1_freedom"] = true,
+	["hostage_companion_task_1_killer"] = true,
+	-- xQd end
+	["jup_b10_stalker_drunk_squad"] = true,
+	["zat_b18_noah_squad"] = true,
+}
+
+function squad_on_unregister(squad)
+	if (squad) then
+		local faction = squad:get_squad_community()
+
+		if (registered_squads[faction]) then
+			registered_squads[faction][squad.id] = nil
+
+			if (smart_terrain_warfare.random_patrols[squad.idw]) then
+				smart_terrain_warfare.random_patrols[squad.id] = nil
+			end
+
+			if (squad.patrol_owner) then
+				smart_terrain_warfare.patrol_squads[squad.patrol_owner][squad.id] = nil
+			end	
+		else
+			printf(faction)
+		end
+	end
+end
+
+function on_game_start()
+	RegisterScriptCallback("fill_start_position", fill_start_position)
+	RegisterScriptCallback("smart_terrain_on_update", smart_terrain_warfare.smart_terrain_on_update)
+	RegisterScriptCallback("save_state", save_state)
+	RegisterScriptCallback("load_state", load_state)
+	RegisterScriptCallback("actor_on_update", actor_on_update)
+	RegisterScriptCallback("squad_on_update", sim_squad_warfare.squad_on_update)
+	RegisterScriptCallback("squad_on_npc_death", sim_squad_warfare.squad_on_npc_death)
+	RegisterScriptCallback("squad_on_unregister", squad_on_unregister)
+	
+	warfare_options.setup_options()
+	warfare_options.override_functions()
+end
+
+function printd(e, optionalMessage)
+    if (warfare_options.options.debug_logging) then
+        info = debug.getinfo(2, "nS")
+		local line = debug.getinfo(1).currentline
+
+        if (info.short_src and info.name) then
+			local str = info.short_src.." || "..info.name.." || line: "..line
+
+			if (e == 0) then
+				str = str.." || start"
+				
+				if (optionalMessage) then
+					str = str..optionalMessage
+				end
+			else
+				str = str.." || end "..e
+				
+				if (optionalMessage) then
+					str = str..optionalMessage
+				end
+			end
+
+			printf(str)
+		end
+    end
+end
+
+function hash_table_to_array(tbl)
+	local r = {}
+	
+	for k,v in pairs(tbl) do 
+		r[#r+1] = {key=k, value=v}
+	end
+	
+	return r
+end
+
+
+-- Requires the priority to be the first element in each table within tbl.
+function sort_priority_table(tbl)	
+	table.sort(tbl, function(a, b)
+		return (math.abs(a[1]) < math.abs(b[1]))
+	end) return tbl
+end
+
+function distance_to_xz_sqr(a, b)
+	return math.pow(b.x - a.x, 2) + math.pow(b.z - a.z, 2)
+end
+
+-- From DrX dynamic relations
+function set_faction_relations(faction_1, faction_2, relation)
+
+	-- Get old faction relations:
+	local old_1_2_relations = game_relations.get_factions_community( faction_1, faction_2 )
+	local old_2_1_relations = game_relations.get_factions_community( faction_2, faction_1 )
+	if ( (math.abs( old_2_1_relations )) > (math.abs( old_1_2_relations )) ) then
+		old_1_2_relations = old_2_1_relations
+	end
+	local old_a1_2_relations = game_relations.get_factions_community( ("actor_" .. faction_1), faction_2 )
+	local old_2_a1_relations = game_relations.get_factions_community( faction_2, ("actor_" .. faction_1) )
+	if ( (math.abs( old_2_a1_relations )) > (math.abs( old_a1_2_relations )) ) then
+		old_a1_2_relations = old_2_a1_relations
+	end
+	local old_a2_1_relations = game_relations.get_factions_community( ("actor_" .. faction_2), faction_1 )
+	local old_1_a2_relations = game_relations.get_factions_community( faction_1, ("actor_" .. faction_2) )
+	if ( (math.abs( old_1_a2_relations )) > (math.abs( old_a2_1_relations )) ) then
+		old_a2_1_relations = old_1_a2_relations
+	end
+-- 	local old_p_1_goodwill = relation_registry.community_goodwill( faction_1, db.actor:id( ) )
+-- 	local old_p_2_goodwill = relation_registry.community_goodwill( faction_2, db.actor:id( ) )
+
+	if ( relation > 5000 ) then
+		if ( math.random( 100 ) < 50 ) then
+			relation = math.random(0, 5000)
+		else
+			relation = 5000
+		end
+	elseif ( relation < -5000 ) then
+		if ( math.random( 100 ) < 50 ) then
+			relation = math.random(-5000, 0)
+		else
+			relation = -5000
+		end
+	end
+
+	-- Set overall faction relations:
+	game_relations.set_factions_community_num( faction_1, faction_2, relation )
+	alun_utils.save_var( db.actor, ("drx_df_" .. faction_1 .. "_" .. faction_2 .. "_relations"), relation )
+	game_relations.set_factions_community_num( faction_2, faction_1, relation )
+	alun_utils.save_var( db.actor, ("drx_df_" .. faction_2 .. "_" .. faction_1 .. "_relations"), relation )
+	printf( ("DRX DF: " .. faction_1 .. " / " .. faction_2 .. " relations changed from " .. tostring( old_1_2_relations ) .. " to " .. tostring( game_relations.get_factions_community( faction_1, faction_2 ) )) )
+
+	-- Change actor faction / faction 2 relations:
+	game_relations.set_factions_community_num( ("actor_" .. faction_1), faction_2, relation )
+	alun_utils.save_var( db.actor, ("drx_df_" .. "actor_" .. faction_1 .. "_" .. faction_2 .. "_relations"), relation )
+	game_relations.set_factions_community_num( faction_2, ("actor_" .. faction_1), relation )
+	alun_utils.save_var( db.actor, ("drx_df_" .. faction_2 .. "_" .. "actor_" .. faction_1 .. "_relations"), relation )
+
+	-- Change actor faction / faction 1 relations:
+	game_relations.set_factions_community_num( faction_1, ("actor_" .. faction_2), relation )
+	alun_utils.save_var( db.actor, ("drx_df_" .. faction_1 .. "_" .. "actor_" .. faction_2 .. "_relations"), relation )
+	game_relations.set_factions_community_num( ("actor_" .. faction_2), faction_1, relation )
+	alun_utils.save_var( db.actor, ("drx_df_" .. "actor_" .. faction_2 .. "_" .. faction_1 .. "_relations"), relation )
+
+-- 	-- Show current player / faction relations:
+-- 	printf( ("DRX DF:   player / " .. faction_1 .. " goodwill currently " .. tostring( relation_registry.community_goodwill( faction_1, db.actor:id( ) ) )) )
+-- 	printf( ("DRX DF:   player / " .. faction_2 .. " goodwill currently " .. tostring( relation_registry.community_goodwill( faction_2, db.actor:id( ) ) )) )
+
+	-- Check if faction war footing has changed to hostile:
+	if ( (old_1_2_relations > game_relations.ENEMIES) and (game_relations.get_factions_community( faction_1, faction_2 ) <= game_relations.ENEMIES) ) then
+		printf( ("DRX DF: " .. faction_1 .. " has declared war on " .. faction_2) )
+		news_manager.send_tip( db.actor, (game.translate_string( faction_1 ) .. " and " .. game.translate_string( faction_2 ) .. " factions have declared war on each other."), nil, "patriarch", nil, nil )
+	end
+
+	-- Check if faction war footing has changed to allied:
+	if ( (old_1_2_relations < game_relations.FRIENDS) and (game_relations.get_factions_community( faction_1, faction_2 ) >= game_relations.FRIENDS) ) then
+		printf( ("DRX DF: " .. faction_1 .. " has formed an alliance with " .. faction_2) )
+		news_manager.send_tip( db.actor, (game.translate_string( faction_1 ) .. " and " .. game.translate_string( faction_2 ) .. " factions have formed an alliance."), nil, "completionist", nil, nil )
+	end
+
+	-- Check if faction war footing has changed from allied to neutral:
+	if ( (old_1_2_relations >= game_relations.FRIENDS) and (game_relations.get_factions_community( faction_1, faction_2 ) < game_relations.FRIENDS) and (game_relations.get_factions_community( faction_1, faction_2 ) > game_relations.ENEMIES) ) then
+		printf( ("DRX DF: Relations between " .. faction_1 .. " and " .. faction_2 .. " are deteriorating") )
+		news_manager.send_tip( db.actor, (game.translate_string( faction_1 ) .. "-" .. game.translate_string( faction_2 ) .. " relations are deteriorating."), nil, "silver_or_lead", nil, nil )
+	end
+
+	-- Check if faction war footing has changed from hostile to neutral:
+	if ( (old_1_2_relations <= game_relations.ENEMIES) and (game_relations.get_factions_community( faction_1, faction_2 ) < game_relations.FRIENDS) and (game_relations.get_factions_community( faction_1, faction_2 ) > game_relations.ENEMIES) ) then
+		printf( ("DRX DF: " .. faction_1 .. " and " .. faction_2 .. " have declared a cease-fire") )
+		news_manager.send_tip( db.actor, (game.translate_string( faction_1 ) .. " and " .. game.translate_string( faction_2 ) .. " factions have declared a cease-fire."), nil, nil, nil, nil )
+	end
+
+	-- Reset player / faction 2 relations:
+	if ( character_community( db.actor ) == ("actor_" .. faction_1) ) then
+		relation_registry.set_community_goodwill( faction_2, db.actor:id( ), 0 )
+-- 		printf( ("DRX DF:   player / " .. faction_2 .. " goodwill changed from " .. tostring( old_p_2_goodwill ) .. " to " .. tostring( relation_registry.community_goodwill( faction_2, db.actor:id( ) ) )) )
+
+	-- Reset player / faction 1 relations:
+	elseif ( character_community( db.actor ) == ("actor_" .. faction_2) ) then
+		relation_registry.set_community_goodwill( faction_1, db.actor:id( ), 0 )
+-- 		printf( ("DRX DF:   player / " .. faction_1 .. " goodwill changed from " .. tostring( old_p_1_goodwill ) .. " to " .. tostring( relation_registry.community_goodwill( faction_1, db.actor:id( ) ) )) )
+
+	end
+
+end
+
+function is_warfare_trader(npc)
+	local comm = npc:character_community() 
+	if comm == "killer" then
+		comm = "merc"
+	end
+	if string.find(npc:name(), "sim_default_" .. comm .. "_trader") or string.find(npc:name(), "sim_default_" .. comm .. "mechanic") then
+		return true
+	else
+		return false
+	end
+end 
+
+function is_squad_section_enemy_of_faction(squad_section, faction)
+	if not faction then
+		faction = db.actor and character_community(db.actor) --:sub(7)
+	end
+	if string.find(squad_section,"stalker") then
+		return game_relations.is_factions_enemies("stalker", faction)
+	elseif string.find(squad_section,"bandit") then
+		return game_relations.is_factions_enemies("bandit", faction)
+	elseif string.find(squad_section,"csky") then
+		return game_relations.is_factions_enemies("csky", faction)
+	elseif string.find(squad_section,"army") or string.find(squad_section,"military") then
+		return game_relations.is_factions_enemies("army", faction)
+	elseif string.find(squad_section,"freedom") then
+		return game_relations.is_factions_enemies("freedom", faction)
+	elseif string.find(squad_section,"duty") or string.find(squad_section,"dolg") then
+		return game_relations.is_factions_enemies("dolg", faction)
+	elseif string.find(squad_section,"ecolog") then
+		return game_relations.is_factions_enemies("ecolog", faction)
+	elseif string.find(squad_section,"merc") or string.find(squad_section,"killer") then
+		return game_relations.is_factions_enemies("killer", faction)
+	elseif string.find(squad_section,"monolith") then
+		return game_relations.is_factions_enemies("monolith", faction)
+	elseif string.find(squad_section,"zombied") then
+		return game_relations.is_factions_enemies("zombied", faction)
+	else
+		return true
+	end
+end

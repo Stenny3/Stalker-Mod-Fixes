@@ -1,0 +1,63 @@
+printd = warfare.printd
+
+manual_control = false
+
+local function map_spot_menu_add_property(ui,id,lvl)
+    printd(0)
+
+	local obj = alife():object(id)
+	if not (obj) then
+        printd(1)
+		return
+	end
+	
+	if (obj.id == 0) then
+--av661194	
+		ui:AddItem("Influence Points: " .. string.format("%.2f",warfare.actor_influence_points))
+--av661194
+		ui:AddItem("---------------------")
+		
+		if (manual_control) then
+			ui:AddItem("Release control of faction")
+		else
+			ui:AddItem("Take control of faction")
+		end
+		
+		if (smart_terrain_warfare.hide_smarts) then
+			ui:AddItem("Show Points / Smart Terrain")
+		else
+			ui:AddItem("Hide Points / Smart Terrain")
+		end
+	end
+    
+    printd(2)
+end
+
+local function map_spot_menu_property_clicked(property_ui,id,level_name,prop)
+    printd(0)
+
+	local obj = alife():object(id)
+	if not (obj) then
+        printd(1)
+		return
+	end
+	
+	if (obj.id == 0) then
+		if (prop == "Take control of faction" or prop == "Release control of faction") then
+			manual_control = not manual_control
+		elseif (prop == "Display faction information") then
+			-- TODO: make a pop up menu with faction stats.
+		end
+		
+		if (prop == "Show Points / Smart Terrain" or prop == "Hide Points / Smart Terrain") then
+			smart_terrain_warfare.hide_smarts = not smart_terrain_warfare.hide_smarts
+		end
+	end
+    
+    printd(2)
+end
+
+function on_game_start()
+	RegisterScriptCallback("map_spot_menu_add_property",map_spot_menu_add_property)
+	RegisterScriptCallback("map_spot_menu_property_clicked",map_spot_menu_property_clicked)
+end

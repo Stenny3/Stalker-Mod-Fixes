@@ -1,0 +1,385 @@
+-- werejew
+
+printd = warfare.printd
+
+class "combat_group"
+function combat_group:__init()
+	self.squads = {}
+	self.squad_count = 0
+	self.disbanded = false
+end
+
+-- Register squad1 with target squad2. Squads should move toward each other now, or at least toward an enemy
+-- within the combat group.
+function combat_group:register(squad1, opponent)
+    printd(0)
+
+	if not (self.disbanded) then
+		if not (self.squads[squad1.id]) then
+			-- store squads original target as the value in the squads table.
+			self.squads[squad1.id] = squad1.current_target_id
+			squad1.combat_target_id = squad1.current_target_id
+			self.squad_count = self.squad_count + 1
+			squad1.combat_group = self
+			squad1.assigned_target_id = opponent
+			
+			
+			--printf("--- registered squad " .. squad1:name() .. " with saved target as: " .. tostring(self.squads[squad1.id]) .. " and opponent: " .. opponent .. " ---")
+			--printf("--- combat group has " .. self.squad_count .. " squads registered ---")
+		end
+	end
+    
+    printd(1)
+end
+
+function combat_group:unregister(squad)
+    printd(0)
+	-- reset squad target to original target.
+	squad.assigned_target_id = squad.current_target_id or self.squads[squad.id]
+	self.squads[squad.id] = nil
+	self.squad_count = self.squad_count - 1
+	squad.combat_group = nil
+	squad.combat_target_id = nil
+	
+	if not squad.assigned_target_id then		
+		local f = squad:get_squad_community()
+		local f = squad:get_squad_community()
+		local t2 = warfare.registered_squads[f][squad.id]
+	end
+	
+	-- Disband if only one squad is left, since there are obviously not going to be any targets for it.
+	if (self.squad_count <= 1) then
+		self:disband()
+	end
+    
+    printd(1)
+end
+
+-- Called when the squads current opponent is no longer in the combat group.
+function combat_group:find_enemy(squad)
+    printd(0)
+    
+	local faction = squad:get_squad_community()
+	
+	local sim = alife()
+	
+	-- cycle through squads
+	for s,t in pairs(self.squads) do
+		if s ~= squad.id then	
+			local squad2 = sim:object(s)
+			
+			-- if the squad sim object is found
+			if squad2 and squad2.get_squad_community then
+				-- get the squads faction and power
+				local faction2 = squad2:get_squad_community()
+				squad2_power = offline_combat_simulator.ocs_power_table[s]
+				
+				-- Check to make sure the squads power is greater than 0, and see if the factions are enemies.
+				if squad2_power and squad2_power > 0 and game_relations.is_factions_enemies(faction, faction2) then
+					-- s is the id of the new target squad
+                       
+                    printd(1)
+
+					return s
+				end
+			end
+		end
+	end
+	
+    printd(2)
+
+	-- no enemy squad found
+	return nil
+end
+
+function combat_group:is_valid()
+	local foundEnemy = false
+
+	for s,t in pairs(self.squads) do
+		for s2,t2 in pairs(self.squads) do
+			if s ~= s2 then
+				local squad = alife():object(s)
+				local squad2 = alife():object(s2)
+				
+				-- if the squad sim object is found
+				if squad and squad.get_squad_community and squad2 and squad2.get_squad_community then
+					-- get the squads faction and power
+					local faction = squad:get_squad_community()
+					local faction2 = squad2:get_squad_community()
+					squad2_power = offline_combat_simulator.ocs_power_table[s]
+					
+					-- Check to make sure the squads power is greater than 0, and see if the factions are enemies.
+					if squad2_power and squad2_power > 0 and game_relations.is_factions_enemies(faction, faction2) then
+						return true
+					end
+				end
+			end
+		end
+	end
+	
+	return false
+end
+
+function combat_group:simulate(squad)
+    printd(0)
+	
+	if not (self:is_valid()) then
+		self:disband()
+		return
+	end
+
+	local sim = alife()
+
+	-- get the squads pwoer
+	local squad_power = offline_combat_simulator.ocs_power_table[squad.id]
+	
+	-- if squads power is zero or less, remove it and return.
+	if not (squad_power and squad_power > 0) or (squad:npc_count() == 0) then
+		self:unregister(squad)
+        printd(1)
+		return
+	end
+	
+	-- get the squads opponent id
+	local s2id = squad.assigned_target_id
+	
+	-- check to see if the opponent squad is still in the combat group
+	if not (self.squads[s2id]) then
+		-- find a new opponent
+		local new = self:find_enemy(squad)
+		
+		-- If new opponent found, set it as the new target for the squad. otherwise, unregister squad and return.
+		if (new) then
+			squad.assigned_target_id = new
+			s2id = new
+			
+			--printf("--- " .. squad:name() .. " new target: " .. s2id .. " ---")
+		else
+			--printf("--- no enemies found for " .. squad:name() .. " - removing squad ---")
+			self:unregister(squad)
+            printd(2)
+			return
+		end
+	end
+	
+	local squad2 = sim:object(s2id)
+	
+	if not (squad2) then
+        printd(3)
+		return
+	end
+	
+	if squad.online or squad2.online then
+		--printf("--- disbanding combat group (squad is online) ---")	
+		self:disband()
+        printd(4)
+		return
+	end
+	
+	local squad2_power = offline_combat_simulator.ocs_power_table[s2id]
+	
+	if not (squad2_power and squad2_power > 0) or (squad2:npc_count() == 0) then
+		self:unregister(squad2)
+        printd(5)
+		return
+	end
+
+    local squad1mult = warfare_options.options.factions[squad:get_squad_community()].offline_power_multiplier or 1
+    local squad2mult = warfare_options.options.factions[squad2:get_squad_community()].offline_power_multiplier or 1
+
+    squad_power = squad_power * squad1mult
+    squad2_power = squad2_power * squad2mult
+	
+	local totalCasualties = 0
+
+	local squad_npcs = {}
+	for k in squad:squad_members() do
+		squad_npcs[#squad_npcs+1] = k
+	end
+	
+	local squad2_npcs = {}
+	for k in squad2:squad_members() do
+		squad2_npcs[#squad2_npcs+1] = k
+	end
+	
+	local k1 = squad_npcs[math.random(#squad_npcs)]
+	local k2 = squad2_npcs[math.random(#squad2_npcs)]
+
+	--printf("squad1 count: " .. squad:npc_count())
+	--printf("squad2 count: " .. squad2:npc_count())
+	
+	local attacker = k1.object or k1.id and sim:object(k1.id)
+	local victim = k2.object or k2.id and sim:object(k2.id)
+	local damage = squad_power * (0.4 + math.random() * 0.2)
+	local new_power = math.max(0, squad2_power - damage)
+	local diff = squad2_power - new_power
+	local kp = victim:rank()
+	local mul = 1 / math.random(2, 3)
+	
+	--printf("power (victim): %s, power (attacker): %s, damage: %s, new: %s", squad2_power, squad_power, damage, new_power)
+	
+	-- the attacker along with their commander should have their rank increased
+	if attacker and attacker.set_rank then
+        --printf("increased %s's rank", attacker and attacker.character_name and attacker:character_name() or ".")
+        attacker:set_rank(attacker:rank() + math.ceil(damage/250)) -- increase attackers rank depending on their damage
+    end
+    local commander = sim:object(squad:commander_id())
+    if commander and commander.set_rank then
+        --printf("increased commander %s's rank", commander and commander.character_name and commander:character_name() or ".")
+        commander:set_rank(commander:rank() + math.random(1,5)) -- increase rank of commander for each attack
+    end
+	
+	offline_combat_simulator.ocs_power_table[s2id] = new_power
+	
+	if new_power <= 0 then		
+		--printf("!!! %s killed %s !!!", squad:name(), squad2:name())
+	
+		for i,npc in pairs(squad2_npcs) do
+			squad2:remove_npc(npc)
+			squad_npc_killed_offline_combat(squad:get_squad_community(), squad2:get_squad_community())
+		end
+		
+		sim_squad_warfare.remove_squad(squad2)
+		self:unregister(squad2)		
+	else
+		if kp * mul <= diff then		
+			squad2:remove_npc(k2.id)
+		
+			squad_npc_killed_offline_combat(squad:get_squad_community(), squad2:get_squad_community())
+
+			if squad2:npc_count() <= 1 then
+				sim_squad_warfare.remove_squad(squad2)
+			end
+
+			--printf("!!! %s NPC killed %s NPC !!!", squad:name(), squad2:name())
+		end
+	end
+    
+    printd(6)
+end
+
+function combat_group:disband()
+    printd(0)
+
+	local sim = alife()
+	
+	--printf("disbanding squads - " .. self.squad_count)
+
+	if not (self.disbanded) then
+		for s,t in pairs(self.squads) do
+			local squad = sim:object(s)
+			
+			if squad then				
+				squad.assigned_target_id = squad.current_target_id or self.squads[squad.id]
+				squad.combat_group = nil
+				squad.combat_target_id = nil
+				self.squads[squad.id] = nil
+			end
+		end
+		
+		self.squads = {}
+		self.disbanded = true
+	end
+    
+    printd(1)
+end
+
+
+-- Modified version of drx_df_npc_on_death_callback for offline combat
+function squad_npc_killed_offline_combat(killer, victim)
+    printd(0)
+
+	if not game_relations.drx_df_changeable_factions_list then
+		-- dynamic relations not installed.
+        printd(1)
+		return
+	end
+
+	local max_value = 200
+	
+	local killed_faction = victim
+		-- Format faction name:
+	local start, finish = string.find( killed_faction, "actor_" )
+	if ( finish ) then
+		killed_faction = string.sub( killed_faction, (finish + 1) )
+	end
+
+	-- Check if dead guy changeable faction:
+	local faction_check = false
+	for j = 1, #game_relations.drx_df_changeable_factions_list do
+		if ( killed_faction == game_relations.drx_df_changeable_factions_list[j] ) then
+			faction_check = true
+			break
+		end
+	end
+	if ( not faction_check ) then
+        printd(2)
+		return
+	end
+	
+	local killer_faction = killer
+
+	-- Format faction name:
+	local start, finish = string.find( killer_faction, "actor_" )
+	if ( finish ) then
+		killer_faction = string.sub( killer_faction, (finish + 1) )
+	end
+
+	-- Check if killer changeable faction:
+	local faction_check = false
+	for j = 1, #game_relations.drx_df_changeable_factions_list do
+		if ( killer_faction == game_relations.drx_df_changeable_factions_list[j] ) then
+			faction_check = true
+			break
+		end
+	end
+	if ( not faction_check ) then
+        printd(3)
+		return
+	end
+
+	-- If killed NPC was enemy of facton, raise goodwill toward killer faction:
+	if ( math.random( 100 ) > 50 ) then
+		for i = 1, #game_relations.drx_df_changeable_factions_list do
+			if ( game_relations.drx_df_changeable_factions_list[i] ~= killer_faction ) then
+				if ( game_relations.is_factions_enemies( game_relations.drx_df_changeable_factions_list[i], killed_faction ) ) then
+					if ( math.random( 100 ) > 50 ) then
+						local value = math.random( 0, max_value )
+						if ( math.random( 100 ) > 50 ) then
+							value = math.floor( (value * math.random( )) )
+						else
+							value = math.floor( (value * (1 + math.random( ))) )
+						end
+						game_relations.drx_df_change_faction_relations( game_relations.drx_df_changeable_factions_list[i], killer_faction, value )
+						
+						--printf("!!! OFFLINE RELATION ADJUST: " .. game_relations.drx_df_changeable_factions_list[i] .. " <-> " .. killer_faction .. ": " .. value .. " !!!")
+					end
+				end
+			end
+		end
+
+	-- If killed NPC was friend or neutral to facton, lower goodwill toward killer faction:
+	else
+		for i = 1, #game_relations.drx_df_changeable_factions_list do
+			if ( game_relations.drx_df_changeable_factions_list[i] ~= killer_faction ) then
+				if ( not game_relations.is_factions_enemies( game_relations.drx_df_changeable_factions_list[i], killed_faction ) ) then
+					if ( math.random( 100 ) > 50 ) then
+						local value = math.random( 0, max_value )
+						if ( math.random( 100 ) > 50 ) then
+							value = math.floor( (value * math.random( )) )
+						else
+							value = math.floor( (value * (1 + math.random( ))) )
+						end
+						game_relations.drx_df_change_faction_relations( game_relations.drx_df_changeable_factions_list[i], killer_faction, -(value) )
+						--printf("!!! OFFLINE RELATION ADJUST: " .. game_relations.drx_df_changeable_factions_list[i] .. " <-> " .. killer_faction .. ": " .. -(value) .. " !!!")
+					end
+				end
+			end
+		end
+
+	end
+        
+    printd(4)
+end
+
+	

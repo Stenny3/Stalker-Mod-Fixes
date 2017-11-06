@@ -1,0 +1,226 @@
+printd = warfare.printd
+
+factions = {
+	"stalker",
+	"bandit",
+	"csky",
+	"army",
+	"freedom",
+	"dolg",
+	"ecolog",
+	"killer",
+	"monolith",
+	--"monster",
+	"zombied",
+}
+
+all_factions = {
+	"stalker",
+	"bandit",
+	"csky",
+	"army",
+	"freedom",
+	"dolg",
+	"ecolog",
+	"killer",
+	"monolith",
+	"monster",
+	"zombied",
+}
+
+faction_information = {}
+faction_timers = {}
+
+--[[
+
+	faction_information[faction] = {
+		base_count,
+		resource_count,
+		total_power,
+		defense_squads, -- current_action == 1 and (target.props.base > 0 or target.props.resource > 0)
+		offense_squads, -- current_action == 0 and (target.props.base > 0 or target.props.resource > 0)
+		patrol_squads,	-- current_action == 0 and (target.props.base == 0 and target.props.resource == 0)
+		relations = {
+			[faction] = value
+		},
+	}
+	
+]]
+
+function math.clamp(value, minimum, maximum)
+	value = math.max(value, minimum)
+	value = math.min(value, maximum)
+	return value
+end
+
+function update()
+	for i,faction in pairs(factions) do
+		if faction ~= "monster" then
+			update_faction(faction)
+		end
+	end
+end
+
+function fill_table(faction, minUpdate, maxUpdate)
+	faction_information[faction] = {}
+	faction_information[faction].timer = game.get_game_time()
+	faction_information[faction].next_update = minUpdate and math.random(minUpdate, maxUpdate) or 0
+	faction_information[faction].base_count = 0
+	faction_information[faction].resource_count = 0
+	faction_information[faction].total_power = 0		
+	faction_information[faction].inactive_squads = 0
+	faction_information[faction].active_squads = 0
+	faction_information[faction].faction_respawn = 0
+	faction_information[faction].patrol_respawn = 0
+	faction_information[faction].patrol_squads = 0
+	faction_information[faction].invasion_size = 0
+		faction_information[faction].patrol_pop_factor = 0
+end
+
+function update_faction(faction)
+	if (not faction or faction == "none") then
+		return
+	end
+
+	if not (faction_information[faction]) then
+		faction_information[faction] = {}
+		faction_information[faction].base_count = 0
+		faction_information[faction].resource_count = 0
+		faction_information[faction].total_power = 0		
+		faction_information[faction].inactive_squads = 0
+		faction_information[faction].active_squads = 0
+		faction_information[faction].faction_respawn = 0
+		faction_information[faction].patrol_respawn = 0
+		faction_information[faction].patrol_squads = 0
+		faction_information[faction].invasion_size = 0
+		faction_information[faction].patrol_pop_factor = 0
+		
+	end
+
+	if (not faction_information[faction].timer or game.get_game_time():diffSec(faction_information[faction].timer) >= (faction_information[faction].next_update*60)) then
+        printd(0)		
+		
+		faction_information[faction] = {}
+        faction_information[faction].timer = game.get_game_time()
+		faction_information[faction].next_update = math.random(3, 15)		
+		faction_information[faction].base_count = 0
+		faction_information[faction].resource_count = 0
+		faction_information[faction].total_power = 0		
+		faction_information[faction].inactive_squads = 0
+		faction_information[faction].active_squads = 0
+		faction_information[faction].faction_respawn = 0
+		faction_information[faction].patrol_respawn = 0
+		faction_information[faction].patrol_squads = 0
+		faction_information[faction].invasion_size = 0
+		faction_information[faction].patrol_pop_factor = 0
+
+		for i,lvl in pairs(level_targets.active_levels) do
+			local info = warfare_levels.level_information[lvl]
+			
+			if (info.faction_stats and info.faction_stats[faction]) then
+				local num_active = offline_combat_simulator.get_num_active_squads_on_level(lvl, faction)
+				local num_inactive = offline_combat_simulator.get_num_inactive_squads_on_level(lvl, faction)
+			
+				--printf("faction=%s, bases=%s, resources=%s, active=%s, inactive=%s", faction, info.faction_stats[faction].base_count, info.faction_stats[faction].resource_count, num_active, num_inactive)
+				faction_information[faction].base_count = faction_information[faction].base_count + info.faction_stats[faction].base_count
+				faction_information[faction].resource_count = faction_information[faction].resource_count + info.faction_stats[faction].resource_count
+				faction_information[faction].total_power = faction_information[faction].total_power + info.faction_stats[faction].total_power
+				faction_information[faction].active_squads = faction_information[faction].active_squads + num_active
+				faction_information[faction].inactive_squads = faction_information[faction].inactive_squads + num_inactive
+			end
+		end
+
+--[[
+		if (base_count == 0) then
+			local resurgence_chance = warfare_options.options.factions[faction].resurgence_chance
+
+			if (math.random(100) <= resurgence_chance) then
+				local levels = warfare.hash_table_to_array(level_targets.active_levels)
+				warfare.shuffle_table(levels)
+
+				local chosen = levels[0].key
+				local info = warfare_levels.level_information[chosen]
+
+				if (info) then
+					for smart_id,v in pairs(warfare_levels.level_information[smart.level_id].smarts) do
+						local smart = alife_object(smart_id)
+
+						if (smart) then
+							if (smart.props and smart.props.base > 0) then
+								if (smart.owning_faction == "none") then
+
+								end
+							end
+						end
+					end
+
+					for smart_id,v in pairs(warfare_levels.level_information[smart.level_id].smarts) do
+						local smart = alife_object(smart_id)
+
+						if (smart) then
+							if (smart.props and smart.props.territory > 0) then
+
+							end
+						end
+					end
+				end
+			end
+		end
+]]
+		printf(tostring(faction))
+
+        local ff = warfare_options.options.factions[faction]
+
+		if not (ff) then
+			return
+		end
+
+		local base_count = faction_information[faction].base_count or 0
+		local resource_count = faction_information[faction].resource_count or 0
+
+		if (game_relations.is_factions_enemies(faction, warfare.actor_faction)) then
+			base_count = base_count + warfare_options.options.enemy_base_boost
+			resource_count = resource_count + warfare_options.options.enemy_resource_boost
+		end
+
+		base_count = base_count + (ff and ff.base_count_modifier or 0)
+		resource_count = resource_count + (ff and ff.resource_count_modifier or 0)
+
+		faction_information[faction].base_count = base_count
+		faction_information[faction].resource_count = resource_count
+
+		local respawn = warfare.lerp(ff.max_faction_respawn, ff.min_faction_respawn, math.clamp(resource_count / warfare.resource_count, 0, 1))
+		local patrol_respawn = warfare.lerp(ff.max_patrol_time, ff.min_patrol_time, math.clamp(resource_count / warfare.resource_count, 0, 1))
+		local invasion_size = warfare.lerp(ff.min_invasion_size, ff.max_invasion_size, math.clamp(base_count / warfare.base_count, 0, 1))
+		local patrol_pop_factor = warfare.lerp(ff.min_patrol_squads, ff.max_patrol_squads, math.clamp(base_count / warfare.base_count, 0, 1))
+
+		for faction,tbl in pairs(warfare.registered_squads) do
+			for ID,target in pairs(tbl) do
+				local obj = alife_object(ID)
+
+				if (obj) then
+					if not (obj.clsid and obj:clsid() == clsid.online_offline_group_s and obj:get_squad_community() == faction) then
+						warfare.registered_squads[faction][ID] = nil
+					end
+				else
+					warfare.registered_squads[faction][ID] = nil
+				end
+			end
+		end
+
+        faction_information[faction].faction_respawn = respawn
+		faction_information[faction].patrol_respawn = patrol_respawn
+        faction_information[faction].patrol_squads = patrol_squads
+		faction_information[faction].invasion_size = invasion_size
+		faction_information[faction].patrol_pop_factor = patrol_pop_factor
+	
+        printd(1)
+		
+		--printf("--- " .. faction .. " base count: " .. faction_information[faction].base_count .. " ---")
+		--printf("--- " .. faction .. " resource count: " .. faction_information[faction].resource_count .. " ---")
+		--printf("--- " .. faction .. " total power: " .. faction_information[faction].total_power .. " ---")
+	end
+	-- TODO: Calculate faction stats. Iterate over level_information in warfare_levels to see if the faction has an entry.
+	-- If so, the base_count, resource_count, and total_power of that level will be added to the faction_information[faction] table.
+	-- After that, iterate over registered faction squads in order to set offensive_squads and patrol_squads.
+end

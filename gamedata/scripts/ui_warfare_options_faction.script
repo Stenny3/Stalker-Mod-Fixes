@@ -1,0 +1,252 @@
+class "warfare_options_faction" (CUIWindow)
+function warfare_options_faction:__init() super()
+end
+
+function warfare_options_faction:__finalize()
+
+end
+
+function warfare_options_faction:InitControls(x, y, xml, parent, f)
+	self.xml = xml
+	self.parent = parent
+    self:SetWndPos(vector2():set(x, y))
+    self:SetWndSize(vector2():set(738, 416))
+    self:SetAutoDelete(true)
+	
+	self.checks = {}
+	self.edits = {}
+
+	self.scroll_v = xml:InitScrollView("scroll_v", self)
+
+	self.faction_dialog = true
+
+	self.faction = f
+	--self.participate_in_warfare = self:add_check("Participate in Warfare", true, "participate_in_warfare")
+	self.random_squad_count = self:add_check("Random squad count", false, "random_squad_count")
+	self.min_random_squad_count = self:add_edit("Minimum random squad count", "1", "min_random_squad_count")
+	self.max_random_squad_count = self:add_edit("Maximum random squad count", "3", "max_random_squad_count")
+	self.min_faction_respawn = self:add_edit("Minimum respawn time", "10", "min_faction_respawn")
+	self.max_faction_respawn = self:add_edit("Maximum respawn time", "90", "max_faction_respawn")
+	self.min_invasion_size = self:add_edit("Minimum invasion population factor", "0.5", "min_invasion_size")
+	self.max_invasion_size = self:add_edit("Maximum invasion pouplation factor", "2.5", "max_invasion_size")
+	self.invasion_departure_chance = self:add_edit("Invasion departuer chance", "100", "invasion_departure_chance")
+	self.min_patrol_squads = self:add_edit("Minimum patrol population factor", "1", "min_patrol_squads")
+	self.max_patrol_squads = self:add_edit("Maximum patrol population factor", "2", "max_patrol_squads")
+	self.min_patrol_time = self:add_edit("Minimum patrol time", "60", "min_patrol_time")
+	self.max_patrol_time = self:add_edit("Maximum patrol time", "240", "max_patrol_time")
+	self.patrol_hunt_chance = self:add_edit("Patrol hunt chance", "50", "patrol_hunt_chance")
+	self.min_patrol_rest_time = self:add_edit("Minimum patrol rest time", "60", "min_patrol_rest_time")
+	self.max_patrol_rest_time = self:add_edit("Maximum patrol rest time", "240", "max_patrol_rest_time")
+	self.offline_power_multiplier = self:add_edit("Offline power multiplier", "1.00", "offline_power_multiplier")
+
+	self.expansion_aggression = self:add_edit("Expansion aggression", "50",  "expansion_aggression")
+	self.night_activity_chance = self:add_edit("Night activity chance", "0.25", "night_activity_chance")
+	self.base_priority = self:add_edit("Base priority", "3", "base_priority")
+	self.resource_priority = self:add_edit("Resource priority", "1", "resource_priority")
+	self.territory_priority = self:add_edit("Territory priority", "0", "territory_priority")
+	self.flag_priority = self:add_edit("Faction flag priority", "1", "flag_priority")
+	self.is_being_targeted_priority = self:add_edit("Is being targeted priority", "2", "is_being_targeted_priority")
+	self.target_weaker_priority = self:add_edit("Target is weaker priority", "2", "target_weaker_priority")
+	self.target_stronger_priority = self:add_edit("Target is stronger priority", "-1", "target_stronger_priority")
+	self.target_on_same_level_priority = self:add_edit("Target on same level priority", "15", "target_on_same_level_priority")
+	self.max_smart_targets_per_base = self:add_edit("Max smart targets per base", "2", "max_smart_targets_per_base")
+	self.resource_count_modifier = self:add_edit("Resource count modifier", "0", "resource_count_modifier")
+	self.base_count_modifier = self:add_edit("Base count modifier", "0", "base_count_modifier")
+
+	self:add_button("Randomize settings", function()
+		local enabled = false
+		if (math.random(100) <= 75) then
+			enabled = true
+		end
+
+		self.min_faction_respawn:SetText(tostring(math.random(10, 90)))
+		self.min_faction_respawn:Show(true)
+		self.max_faction_respawn:SetText(tostring(tonumber(self.min_faction_respawn:GetText()) + math.random(10, 120)))
+		self.max_faction_respawn:Show(true)
+		self.min_invasion_size:SetText(tostring(math.random() * 1))
+		self.min_invasion_size:Show(true)
+		self.max_invasion_size:SetText(tostring(tonumber(self.min_invasion_size:GetText()) + (math.random() * 2)))
+		self.max_invasion_size:Show(true)
+		self.max_smart_targets_per_base:SetText(tostring(math.random(1, 5)))
+		self.max_smart_targets_per_base:Show(true)
+		self.invasion_departure_chance:SetText(tostring(math.random(25, 100)))
+		self.invasion_departure_chance:Show(true)
+		self.min_patrol_squads:SetText(tostring(math.random()))
+		self.min_patrol_squads:Show(true)
+		self.max_patrol_squads:SetText(tostring(tonumber(self.min_patrol_squads:GetText()) + (math.random() * 2)))
+		self.max_patrol_squads:Show(true)
+		self.min_patrol_time:SetText(tostring(math.random(10, 90)))
+		self.min_patrol_time:Show(true)
+		self.max_patrol_time:SetText(tostring(tonumber(self.min_patrol_time:GetText()) + math.random(10, 120)))
+		self.max_patrol_time:Show(true)
+		self.patrol_hunt_chance:SetText(tostring(math.random(100)))
+		self.patrol_hunt_chance:Show(true)
+		self.min_patrol_rest_time:SetText(tostring(math.random(0, 60)))
+		self.min_patrol_rest_time:Show(true)
+		self.max_patrol_rest_time:SetText(tostring(tonumber(self.min_patrol_rest_time:GetText()) + math.random(0, 60)))
+		self.max_patrol_rest_time:Show(true)
+		self.offline_power_multiplier:SetText(tostring(math.random() * 2))
+		self.offline_power_multiplier:Show(true)
+		self.expansion_aggression:SetText(tostring(math.random(100)))
+		self.expansion_aggression:Show(true)
+		self.night_activity_chance:SetText(tostring(math.random(100)))
+		self.night_activity_chance:Show(true)
+		self.base_priority:SetText(tostring(math.random(-5, 5)))
+		self.base_priority:Show(true)
+		self.resource_priority:SetText(tostring(math.random(-5, 5)))
+		self.resource_priority:Show(true)
+		self.territory_priority:SetText(tostring(math.random(-5, 5)))
+		self.territory_priority:Show(true)
+		self.flag_priority:SetText(tostring(math.random(-5, 5)))
+		self.flag_priority:Show(true)
+		self.is_being_targeted_priority:SetText(tostring(math.random(-5, 5)))
+		self.is_being_targeted_priority:Show(true)
+		self.target_weaker_priority:SetText(tostring(math.random(-5, 5)))
+		self.target_weaker_priority:Show(true)
+		self.target_stronger_priority:SetText(tostring(math.random(-5, 5)))
+		self.target_stronger_priority:Show(true)
+		self.target_on_same_level_priority:SetText(tostring(math.random(-5, 5)))
+		self.target_on_same_level_priority:Show(true)
+		self.resource_count_modifier:SetText(tostring(math.random(-15, 15)))
+		self.resource_count_modifier:Show(true)
+		self.base_count_modifier:SetText(tostring(math.random(-15, 15)))
+		self.base_count_modifier:Show(true)
+	end)
+
+	--[[
+	self:add_button("Apply to all", function()
+		for k,v in pairs(self.parent.option_dialogs) do
+			if (v.faction_dialog) then
+				v.min_faction_respawn:SetText(self.min_faction_respawn:GetText())
+				v.max_faction_respawn:SetText(self.max_faction_respawn:GetText())
+				v.min_invasion_size:SetText(self.min_invasion_size:GetText())
+				v.max_invasion_size:SetText(self.max_invasion_size:GetText())
+				v.invasion_departure_chance:SetText(self.invasion_departure_chance:GetText())
+			end
+		end
+	end)
+	]]
+end
+
+function warfare_options_faction:save_dialog()
+	for var,chk in pairs(self.checks) do
+		self:save(chk, self.faction)
+	end
+	
+	for var,edt in pairs(self.edits) do
+		self:save(edt, self.faction)
+	end
+end
+
+function warfare_options_faction:save(cmb, f)
+	if (cmb.GetCheck) then
+		warfare_options.options.factions[self.faction][cmb.variable] = cmb:GetCheck();
+	else
+		warfare_options.options.factions[self.faction][cmb.variable] = cmb:GetText();
+	end
+end
+
+function warfare_options_faction:add_button(text, onClick)
+	if not (self.buttons) then
+		self.buttons = {}
+	end
+
+	local i = #self.buttons
+	local st = self.xml:InitStatic("template_item", nil)
+	local btn = self.xml:Init3tButton("btn_template", st)
+	btn:TextControl():SetText(text)
+
+	self.parent:Register(btn, "btn_template_"..self.faction..i)
+	self.parent:AddCallback("btn_template_"..self.faction..i, ui_events.BUTTON_CLICKED, onClick, self)
+	self.scroll_v:AddWindow(st, true)
+
+	self.buttons[#self.buttons+1] = btn
+end
+
+
+function warfare_options_faction:add_button_to_row(text, p, onClick)
+	if not (self.buttons) then
+		self.buttons = {}
+	end
+
+	local i = #self.buttons
+	local btn = self.xml:Init3tButton("btn_apply_templ", p)
+	btn:TextControl():SetText(text)
+	self.parent:Register(btn, "btn_apply_templ"..self.faction..i)
+	self.parent:AddCallback("btn_apply_templ"..self.faction..i, ui_events.BUTTON_CLICKED, onClick, p)
+	self.buttons[#self.buttons+1] = btn
+end
+
+function warfare_options_faction:add_check(label, default, variable)
+	local st = self.xml:InitStatic("template_item", nil)
+	local txt = self.xml:InitEditBox("txt_template", st)
+	local chk = self.xml:InitCheck("chk_template", st)
+	local def = warfare_options.config:r_value("warfare_options", self.faction.."_"..variable, 1, default)
+
+	self:add_button_to_row("Apply to All", st, function()
+		for k,v in pairs(self.parent.option_dialogs) do
+			if (v.faction_dialog) then
+				local chk = self.checks[self.faction.."_"..variable]:GetCheck()
+				v.checks[v.faction.."_"..variable]:SetCheck(chk)
+			end
+		end
+	end)
+	
+	txt:Enable(false)
+	txt:SetText(variable)
+	chk:SetCheck(def)	
+	chk.variable = variable
+	chk.typ = 1
+	chk.txt = label
+	self.scroll_v:AddWindow(st, true)
+	
+	self.checks[self.faction.."_"..variable] = chk
+
+	if not (self.parent.hints) then
+		self.parent.hints = {}
+	end
+	
+	if (ui_warfare_options_hints.option_hints[variable]) then
+		self.parent:AddHint(txt, ui_warfare_options_hints.option_hints[variable])
+	end
+	
+	return chk
+end
+
+function warfare_options_faction:add_edit(label, default, variable)
+	local st = self.xml:InitStatic("template_item", nil)
+	local txt = self.xml:InitEditBox("txt_template", st)	
+	local edt = self.xml:InitEditBox("edt_template", st)
+	
+	local def = nil
+	
+	def = warfare_options.config:r_value("warfare_options", self.faction.."_"..variable, 0, default or "0")
+
+	self:add_button_to_row("Apply to All", st, function()
+		for k,v in pairs(self.parent.option_dialogs) do
+			if (v.faction_dialog) then
+				local txt = self.edits[self.faction.."_"..variable]:GetText()
+				v.edits[v.faction.."_"..variable]:SetText(txt)
+			end
+		end
+	end)
+	
+	txt:Enable(false)
+	txt:SetText(variable)
+	
+	edt:Enable(true)
+	edt:SetText(def)
+	edt.variable = variable
+	
+	self.scroll_v:AddWindow(st, true)
+	
+	if (variable ~= "") then
+		self.edits[self.faction.."_"..variable] = edt
+	end
+
+	if (ui_warfare_options_hints.option_hints[variable]) then
+		self.parent:AddHint(txt, ui_warfare_options_hints.option_hints[variable])
+	end
+	
+	return edt
+end

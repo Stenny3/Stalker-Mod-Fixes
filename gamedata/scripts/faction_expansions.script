@@ -1,0 +1,206 @@
+-- werejew
+
+function get_advanced_chance(resource)
+	return -1 * (100 * (1 / math.pow(warfare.resource_count / 2, 2))) * math.pow((resource - (warfare.resource_count / 2)), 2) + 100
+end
+
+function get_veteran_chance(resource)
+	return -100 + (100 / (warfare.resource_count / 2)) * resource
+end
+
+function get_spawn_section(faction, resource)
+	local advanced = get_advanced_chance(resource)
+	local veteran = get_veteran_chance(resource)
+	return get_section(faction, advanced, veteran)
+end
+
+function get_section(faction, advanced_chance, veteran_chance)
+	local r = math.random(100)	
+
+	if faction == "stalker" then
+		if r <= veteran_chance then
+			return "stalker_sim_squad_veteran"
+		elseif r <= advanced_chance then
+			return "stalker_sim_squad_advanced"
+		else
+			return "stalker_sim_squad_novice"
+		end
+	elseif faction == "bandit" then
+		if r <= veteran_chance then
+			return "bandit_sim_squad_veteran"
+		elseif r <= advanced_chance then
+			return "bandit_sim_squad_advanced"
+		else
+			return "bandit_sim_squad_novice"
+		end
+	elseif faction == "csky" then
+		if r <= veteran_chance then
+			return "csky_sim_squad_veteran"
+		elseif r <= advanced_chance then
+			return "csky_sim_squad_advanced"
+		else
+			return "csky_sim_squad_novice"
+		end
+	elseif faction == "army" then
+		if r <= veteran_chance then
+			if math.random(100) >= 75 then
+				return "army_sim_squad_veteran"
+			else
+				return "army_sim_squad_sniper"
+			end
+		elseif r <= advanced_chance then
+			return "army_sim_squad_advanced"
+		else
+			return "army_sim_squad_novice"
+		end
+	elseif faction == "freedom" then
+		if r <= veteran_chance then
+			return "freedom_sim_squad_veteran"
+		elseif r <= advanced_chance then
+			return "freedom_sim_squad_advanced"
+		else
+			return "freedom_sim_squad_novice"
+		end
+	elseif faction == "dolg" then
+		if r <= veteran_chance then
+			return "duty_sim_squad_veteran"
+		elseif r <= advanced_chance then
+			return "duty_sim_squad_advanced"
+		else
+			return "duty_sim_squad_novice"
+		end
+	elseif faction == "ecolog" then
+		if r <= veteran_chance then
+			return "ecolog_sim_squad_veteran"
+		elseif r <= advanced_chance then
+			return "ecolog_sim_squad_advanced"
+		else
+			return "ecolog_sim_squad_novice"
+		end
+	elseif faction == "killer" then
+		if r <= veteran_chance then
+			return "merc_sim_squad_veteran"
+		elseif r <= advanced_chance then
+			return "merc_sim_squad_advanced"
+		else
+			return "merc_sim_squad_novice"
+		end
+	elseif faction == "monolith" then
+		if r <= veteran_chance then
+			if math.random(100) >= 75 then
+				return "monolith_sim_squad_veteran"
+			else
+				return "monolith_sim_squad_sniper"
+			end
+		elseif r <= advanced_chance then
+			return "monolith_sim_squad_advanced"
+		else
+			return "monolith_sim_squad_novice"
+		end
+	elseif faction == "zombied" then
+		if r <= veteran_chance then
+			return "zombied_sim_squad_veteran"
+		elseif r <= advanced_chance then
+			return "zombied_sim_squad_advanced"
+		else
+			return "zombied_sim_squad_novice"
+		end
+	elseif faction == "monster" then
+		local random_mutants = {
+			"simulation_bloodsucker",
+			"simulation_bloodsucker",
+			"simulation_boar",
+			"simulation_boar",
+			"simulation_boar",
+			"simulation_dog",
+			"simulation_dog",
+			"simulation_dog",
+			"simulation_pseudodog",
+			"simulation_pseudodog",
+			"simulation_flesh",
+			"simulation_flesh",
+			"simulation_flesh",
+			"simulation_snork",
+			"simulation_snork",
+			"simulation_mix_dogs",
+			"simulation_mix_dogs",
+			"simulation_mix_dogs",
+			"simulation_mix_boar_flesh",
+			"simulation_mix_boar_flesh",
+			"simulation_tushkano",
+			"simulation_tushkano",
+			"simulation_tushkano",
+			"simulation_cat",
+			"simulation_cat",
+			"simulation_zombie",
+		}
+		
+		local random_rare = {
+			"simulation_gigant",	
+			"simulation_controller",	
+			"simulation_controller",	
+			"simulation_burer",		
+			"simulation_burer",		
+			"simulation_chimera",	
+			"simulation_chimera",	
+			"simulation_bloodsucker",
+			"simulation_bloodsucker",
+			"simulation_bloodsucker",
+			"simulation_snork",
+			"simulation_snork",
+			"simulation_snork",
+		}
+		
+		local random_zombies = {
+			"simulation_zombie",
+			"simulation_zombie",
+			"simulation_zombie",
+			"simulation_zombie",
+			"simulation_zombie",
+			"simulation_zombie",
+			"simulation_zombie",
+			"simulation_snork",
+			"simulation_snork",
+			"simulation_zombie",
+			"simulation_zombie",
+			"simulation_zombie",
+			"simulation_zombie",
+			"simulation_zombie",
+			"simulation_zombie",
+			"simulation_bloodsucker",
+			"simulation_chimera",	
+		}
+		
+		if not (IsSurvivalMode()) then
+			if math.random(100) >= 98 then
+				return random_rare[math.random(#random_rare)]
+			else
+				return random_mutants[math.random(#random_mutants)]
+			end
+		else
+			return random_zombies[math.random(#random_zombies)]
+		end
+	end
+	
+	return nil
+end
+
+function get_faction_squad(faction, typ)
+	if (faction == "killer") then
+		faction = "merc"
+	elseif (faction == "dolg") then
+		faction = "duty"
+	end
+
+	if (typ == "novice") then
+		return faction.."_sim_squad_novice"
+	elseif (typ == "advanced") then
+		return faction.."_sim_squad_advanced"
+	elseif (typ == "veteran") then
+		return faction.."_sim_squad_veteran"
+	elseif (typ == "sniper") then
+		if (faction == "monolith" or faction == "army") then
+			return faction.."_sim_squad_sniper"
+		end
+	end
+end

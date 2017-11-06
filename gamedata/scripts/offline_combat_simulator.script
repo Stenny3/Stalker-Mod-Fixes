@@ -1,0 +1,350 @@
+-- werejew
+
+printd = warfare.printd
+
+squads_by_level = {}
+
+-- ocs_power_table[squadID] = power
+-- might want to save this table.
+ocs_power_table = {}
+
+-- table with all of the combat groups.
+-- no longer used.
+combat_groups = {}
+
+function calculate_squad_power(squad)
+    printd(0)
+
+	local power = 0	
+	local sim = alife()
+	
+	for k in squad:squad_members() do
+		local se_obj = k.object or k.id and sim:object(k.id)
+		
+		if (se_obj) then
+			power = power + se_obj:rank()
+			if IsMonster(se_obj) then -- make monster squads exponentially more powerful as their number is bigger
+				power = power * 5
+			end
+		end
+	end
+
+	ocs_power_table[squad.id] = power
+    
+    printd(1)
+end
+
+function squad_on_update(squad)
+    printd(0)
+
+	if squad.registered_with_warfare then
+		local sim = alife()
+		local gg = game_graph()
+		
+		-- If the squads current level id is nil
+		if not (squad.current_level_id) then
+			-- get the level id and set current_level_id
+			local lvl = gg:vertex(squad.m_game_vertex_id):level_id()
+			squad.current_level_id = lvl
+			
+			-- if the level isn't in squads_by_level, create the table for it.
+			if not squads_by_level[lvl] then
+				squads_by_level[lvl] = {}
+			end
+			
+			-- add the squads id to the table of squads in that level.
+			squads_by_level[lvl][squad.id] = true
+			
+			if (squad:get_squad_community() == "monster") then
+				--printf("adding monster to level: " .. alife():level_name(lvl))
+			end
+			
+			if squad.current_target_id then
+				local obj = alife():object(squad.current_target_id)
+				
+				if (obj and obj:clsid() == clsid.smart_terrain) then
+				
+					-- If not targeting a base or resource, flag squad as a patrol. could get weird for manual control; look into alternative solutions.
+					if (obj.props and obj.props.base < 1 and obj.props.resource < 1) then
+						squad.patrol_squad = true
+					end
+				end
+			end
+		end
+	
+		-- if squad isn't online
+		if not squad.online then
+		
+			-- if the squad has a combat group and it isn't disbanded, simulate it.
+			if (squad.combat_group and not squad.combat_group.disbanded) then
+				--printf("--- simulating squad " .. squad:name() .. " ---")
+				squad.combat_group:simulate(squad)
+			end
+			
+			-- get the last level id, and calculate the current level id
+			local last = squad.current_level_id
+			local lvl = gg:vertex(squad.m_game_vertex_id):level_id()
+			
+			squad.current_level_id = lvl
+			
+			-- if the last level id isn't the same as the current one, the squad has moved to a new level.
+			if (last ~= lvl) then
+				-- remove the squads id from the previous levels table.
+				if squads_by_level[last] then
+					squads_by_level[last][squad.id] = nil
+				end
+				
+				-- if the level isn't in squads_by_level, create the table for it.
+				if (not squads_by_level[lvl]) then
+					squads_by_level[lvl] = {}
+				end
+				
+				-- add the squads id to the table of squads in that level.
+				squads_by_level[lvl][squad.id] = true
+			end
+			
+			-- get squads faction
+			local f0 = squad:get_squad_community()
+			
+			if not (warfare_options.options.simulate_offline_combat_at_smarts or warfare_options.options.disable_offline_combat) then
+				-- if squad is a mutant and enable_mutant_offline_combat is false, do not continue
+				if (f0 ~= "monster" or warfare_options.options.enable_mutant_offline_combat) then
+				
+					-- cycle through squads on the squad's current level
+					for i,t in pairs(squads_by_level[lvl]) do
+					
+						-- get the sim object for the squad being checked
+						local squad2 = i and sim:object(i)
+						
+						-- make sure the object exists, is registered with warfare, and is not online.
+						if (squad2 and squad2.registered_with_warfare and not squad2.online) then
+						
+							-- get the squad's faction
+							local f1 = squad2:get_squad_community()
+							
+							-- if the squad is a mutant or enable_mutant_offline combat is false or if the two factions aren't enemies, do not continue.
+							if (f1 ~= "monster" or warfare_options.options.enable_mutant_offline_combat) and game_relations.is_factions_enemies(f0, f1) then					
+
+								local power1 = ocs_power_table[squad.id]
+								local power2 = ocs_power_table[squad2.id]
+							
+								--printf("checking power for " .. squad:name() .. " and " .. squad2:name())
+							
+								-- check to make sure the squads have their powers calculated
+								if (power1 and power1 > 0 and power2 and power2 > 0) then
+									local d = warfare.distance_to_xz_sqr(squad.position, squad2.position)
+									
+									if (d < (50*50)) then
+										--printf("--- setting combat group for " .. squad:name() .. " and " .. squad2:name())
+										-- monolith won't attack monsters offline
+										if not((f0 == "monolith" and f1 =="monster") or (f0 == "monster" and f1 == "monolith")) then
+										offline_combat_simulator.set_combat_group(squad, squad2)
+									end
+								end
+							end
+							end
+						elseif squad2 then
+							--printf("squad2 registered: " .. tostring(squad2.registered_with_warfare) .. " online: " .. tostring(squad2.online))
+						end
+					end
+				end
+			end
+		end
+	end
+    
+    printd(1)
+end
+
+-- create or set the combat group for the squads
+function set_combat_group(squad1, squad2)
+    printd(0)
+
+	-- If both squads have a combat group, return.
+	if (squad1.combat_group and squad2.combat_group) then
+        printd(1)
+		return
+	end
+	
+	-- If either squad is online, return.
+	if (squad1.online or squad2.online) then
+        printd(2)
+		return
+	end
+	
+	-- Make sure squad exists within the simboard, and npc counts are greater than 0
+	if not (SIMBOARD.squads[squad1.id]) or not (SIMBOARD.squads[squad2.id]) or (squad1:npc_count() == 0) or (squad2:npc_count() == 0) then
+        printd(3)
+		return
+	end
+	
+	-- If either squad has a combat group, register the one without a combat group to it.
+	if (squad1.combat_group) then
+		squad1.combat_group:register(squad2, squad1.id)
+        printd(4)
+		return
+	elseif (squad2.combat_group) then
+		squad2.combat_group:register(squad1, squad2.id)
+        printd(5)
+		return
+	end
+	
+	-- Create a new combat group and register both squads with it.
+	local group = combat_group.combat_group()
+	group:register(squad1, squad2.id)
+	group:register(squad2, squad1.id)
+	--combat_groups[#combat_groups+1] = group
+    
+    printd(6)
+end
+
+function get_num_squads_on_level(lvl, faction)
+	if (squads_by_level[lvl]) then
+		local count = 0
+		
+		for s,_ in pairs(squads_by_level[lvl]) do
+			local squad = alife():object(s)
+			
+			if (squad) then			
+				--printf("get_num_squads_on_level -- squad=%s", squad:name())
+			
+				if (squad.get_squad_community and squad:get_squad_community() == faction) then
+					count = count + 1
+				end
+			end
+		end
+		
+		--printf("return " .. tostring(count))
+		
+		return count
+	else
+		--printf("level doesn't exist")
+	end
+
+	return 0
+end
+
+function get_num_active_squads(faction)
+	local num_active = 0
+	
+	--printf("num_active: f=%s, active=%s", faction, num_active)
+	
+	for i,lvl in pairs(level_targets.active_levels) do
+		num_active = num_active + get_num_active_squads_on_level(lvl, faction)
+	end
+	
+	
+	return num_active
+end
+
+function get_num_active_squads_on_level(lvl, faction)
+	if (squads_by_level[lvl]) then
+		local count = 0
+		
+		for s,_ in pairs(squads_by_level[lvl]) do
+			local squad = alife():object(s)
+			
+			if (squad) then			
+				--printf("num active squads -- squad=%s action=%s", squad:name(), squad.current_action)
+			
+				if (squad.get_squad_community and squad:get_squad_community() == faction and squad.current_action == 0) then
+					count = count + 1
+				end
+			end
+		end
+		
+		--printf("return " .. count .. " for " .. faction)
+		
+		return count
+	else
+		--printf("level doesn't exist")
+	end
+
+	return 0
+end
+
+function get_num_inactive_squads_on_level(lvl, faction)
+	if (squads_by_level[lvl]) then
+		local count = 0
+		
+		for s,_ in pairs(squads_by_level[lvl]) do
+			local squad = alife():object(s)
+			
+			if (squad) then			
+				--printf("squad=%s", squad:name())
+			
+				if (squad.get_squad_community and squad:get_squad_community() == faction and squad.current_action == 1) then
+					count = count + 1
+				end
+			end
+		end
+		
+		return count
+	else
+		--printf("level doesn't exist")
+	end
+
+	return 0
+end
+
+function get_num_defense_squads_on_level(lvl, faction)
+	if (squads_by_level[lvl]) then
+		local count = 0
+		
+		for s,_ in pairs(squads_by_level[lvl]) do
+			local squad = alife():object(s)
+			
+			if (squad) then			
+				--printf("squad=%s", squad:name())
+			
+				if (squad.get_squad_community and squad:get_squad_community() == faction and squad.current_action == 1) then
+					local target = squad.current_target_id
+					local obj = target and alife():object(target)
+					
+					if (obj:clsid() == clsid.smart_terrain) then
+						if (obj.owning_faction == faction and obj.props and (obj.props.base > 0 or obj.props.resource > 0)) then
+							count = count + 1
+						end
+					end
+				end
+			end
+		end
+		
+		return count
+	else
+		--printf("level doesn't exist")
+	end
+
+	return 0
+end
+
+function get_num_offense_squads_on_level(lvl, faction)
+	if (squads_by_level[lvl]) then
+		local count = 0
+		
+		for s,_ in pairs(squads_by_level[lvl]) do
+			local squad = alife():object(s)
+			
+			if (squad) then			
+				--printf("squad=%s", squad:name())
+			
+				if (squad.get_squad_community and squad:get_squad_community() == faction and squad.current_action == 0) then
+					local target = squad.current_target_id
+					local obj = target and alife():object(target)
+					
+					if (obj:clsid() == clsid.smart_terrain) then
+						if (obj.props and (obj.props.base > 0 or obj.props.resource > 0)) then
+							count = count + 1
+						end
+					end
+				end
+			end
+		end
+		
+		return count
+	else
+		--printf("level doesn't exist")
+	end
+
+	return 0
+end
+

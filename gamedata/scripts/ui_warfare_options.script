@@ -1,0 +1,462 @@
+local warfare_control = nil
+local xml = nil
+advanced = false
+
+class "warfare_options_dialog" (CUIScriptWnd)
+function warfare_options_dialog:__init() super()
+	self:SetWndRect(Frect():set(0,0,1024,768))
+	
+	self.edits = {}
+	self.combos = {}
+	self.checks = {}
+	self.factions = {}
+	
+	xml = CScriptXmlInit()
+	xml:ParseFile("ui_warfare_options.xml")
+	
+	xml:InitStatic("background", self)
+	self.dialog = xml:InitStatic("main_dialog:dialog", self)
+	self.scroll_v = xml:InitScrollView("scroll_v", self.dialog)
+	
+	self.lbl_warfare_options = xml:InitStatic("lbl_warfare_options", self.dialog)
+	
+	self.btnAccept = xml:Init3tButton("btn_accept", self.dialog)
+	self:Register(self.btnAccept, "btn_accept")
+	self:AddCallback("btn_accept", ui_events.BUTTON_CLICKED, self.btn_accept_clicked, self)
+	self.btnCancel = xml:Init3tButton("btn_cancel", self.dialog)
+	self:Register(self.btnCancel, "btn_cancel")
+	self:AddCallback("btn_cancel", ui_events.BUTTON_CLICKED, self.btn_cancel_clicked, self)
+	self.btnRandomize = xml:Init3tButton("btn_randomize", self.dialog)
+	self:Register(self.btnRandomize, "btn_randomize")
+	--self:AddCallback("btn_randomize", ui_events.BUTTON_CLICKED, self.btn_randomize_clicked, self) disable for now; will likely crash with textboxes.
+	
+	self.cmb_presets = self:add_combo("Presets", { "", }, "", "")
+	self:Register(self.cmb_presets, "cmb_presets")
+	self.cmb_presets:SetText("")
+	
+	local f = getFS()
+	local fl = f:file_list_open_ex('$warfare_presets$', bit_or(FS.FS_ListFiles, FS.FS_RootOnly), "*.ltx")
+	
+	local cnt = fl:Size()
+	for it=0, cnt-1 do
+		local file = fl:GetAt(it)
+		local fn = file:NameFull()
+		
+		if (file:Size() > 0) then
+		
+			local p = ini_file_ex("warfare_presets\\"..fn, true)
+			
+			if (p:section_exist("warfare_options")) then		
+				--fn = fn:sub(0, fn:len()-4)
+				printf("!!! FN: " .. fn .. " !!!")
+				self.cmb_presets:AddItem(fn)
+			end
+		end
+	end
+
+	self:add_break()
+	self:add_label(game.translate_string("General settings"))
+	self:add_break()
+	
+	self:add_check("All out war", false, "all_out_war")
+	self:add_check("Random starting locations", false, "random_starting_locations")
+	self:add_edit("Random stalker chance", "75", "random_stalker_chance")
+	self:add_edit("Random mutant chance", "50", "random_monster_chance")
+	self:add_check("Show unfriendly squads", false, "show_unfriendly_squads")
+	self:add_check("Hide smarts", false, "hide_smarts")
+	self:add_check("Enable fog of war", true, "fog_of_war")
+	self:add_edit("Fog of war distance", "100", "fog_of_war_distance")
+	self:add_check("Enable enemy bonus starting squads", true, "enemy_new_game_bonus")
+	self:add_check("Enable enemy faster respawn", false, "enemy_faster_respawn")
+	self:add_check("Enable auto-capture", false, "enable_auto_capture")
+--av661194
+	self:add_check("Hide undeground smarts on map", false, "hide_undegraund_smarts")
+--av661194	
+	
+    self:add_check("Zombies act as a faction", false, "zombies_act_as_faction")
+	self:add_edit("Manual capture wait time", "30", "manual_capture_wait_time")
+    self:add_edit("Actor influence weight", "1", "actor_influence_weight")
+    self:add_edit("Support novice squad price", "1000", "novice_squad_price")
+    self:add_edit("Support advanced squad price", "2000", "advanced_squad_price")
+    self:add_edit("Support veteran squad price", "32000", "veteran_squad_price")
+    self:add_edit("Support helicopter price", "64000", "heli_price")
+    self:add_edit("Support reward enemy rank weight", "1", "actor_support_enemy_rank_weight")
+    self:add_edit("Support reward money", "100", "actor_support_reward_money")
+    self:add_edit("Support reward influence", "0.2", "actor_support_reward_influence")
+	
+    self:add_check("Disable offline combat", false, "disable_offline_combat")
+	self:add_check("Simulate offline combat at smarts", false, "simulate_offline_combat_at_smarts")
+    self:add_check("Enable mutant offline combat", false, "enable_mutant_offline_combat")
+    --self:add_check("Disable linked levels", false, "disable_linked_levels")
+	self:add_check("Enable offline news events", true, "enable_offline_news")
+	self:add_edit("Offline news display percentage", "5", "offline_news_display_percentage")
+	
+	self:add_edit("Max monster squads per level", "4", "monster_max_squads_per_level")
+	self:add_edit("Min monster respawn", "40", "monster_min_faction_respawn")
+	self:add_edit("Max monster respawn", "180", "monster_max_faction_respawn")    
+	
+    self:add_check("Randomize squad member count", false, "randomize_squad_count")
+    self:add_edit("Min squad member count", "2", "min_squad_count")
+    self:add_edit("Max squad member count", "4", "max_squad_count")
+		
+	self:add_check("Disable smart population cap", false, "disable_smart_pop_cap")
+		
+    self:add_check("Factions keep last base", false, "factions_keep_last_base")
+	self:add_check("Zombie mode", false, "zombie_mode")	
+    self:add_check("Debug logging (inflates log file)", false, "debug_logging")
+	
+    -- Not in currently, will likely add before long. Goal is to find a way to do all of this
+    -- without overwriting scripts (may need to overwrite ui_mm_faction_select still unfortunately)
+	--self:add_check("Use vanilla spawns", true, "use_vanilla_spawns")
+	--self:add_check("Register initial squads", true, "register_initial_squads")
+	--self:add_check("Random starting levels", false, "random_starting_levels")
+	--self:add_check("Factions control starting levels", false, "factions_control_starting_levels")
+	--self:add_check("One starting faction per level", false, "one_starting_faction_per_level")
+	--self:add_check("No random actor squads", false, "no_random_actor_squads")
+	--self:add_combo("Initial squad chance", { 0, 25, 50, 75, 100 }, 100, "random_squad_chance")
+	--self:add_combo("Initial mutant chance", { 0, 25, 50, 75, 100, }, 50, "random_mutant_chance")
+	--self:add_combo("Defense squad cooldown", { 30, 60, 120, 240, 480, }, 240, "defense_squad_cooldown")
+	--self:add_combo("Support squad cooldown", { 30, 60, 120, 240, 480, }, 240, "support_squad_cooldown")
+	--self:add_combo("Helicopter recharge time", {60, 120, 240, 480, 960, }, 480, "faction_heli_recharge")
+	--self:add_check("Zombies act as faction", true, "zombies_act_as_faction")
+	
+	self.faction_combos = {}
+
+	for i,f in pairs(warfare_factions.factions) do
+		-- Add in line break for clarity
+		self:add_break()
+		self:add_label(game.translate_string(f) .. " settings")
+		self:add_break()
+		
+		self.faction_combos[f] = {}
+		self.faction_combos[f].min_faction_respawn = self:add_edit("Min respawn ("..f..")", "40", "min_faction_respawn", f)
+		self.faction_combos[f].max_faction_respawn = self:add_edit("Max respawn ("..f..")", "80", "max_faction_respawn", f)		
+		self.faction_combos[f].min_invasion_size = self:add_edit("Min invasion size ("..f..")", "1.0", "min_invasion_size", f)
+		self.faction_combos[f].max_invasion_size = self:add_edit("Max invasion size ("..f..")", "2.5", "max_invasion_size", f)
+		self.faction_combos[f].invasion_departure_chance = self:add_edit("Invasion departuer chance ("..f..")", "100", "invasion_departure_chance", f)
+		self.faction_combos[f].min_active_squads = self:add_edit("Min active squads ("..f..")", "4", "min_active_squads", f)
+		self.faction_combos[f].max_active_squads = self:add_edit("Max active squads ("..f..")", "16", "max_active_squads", f)	
+		self.faction_combos[f].min_patrol_squads = self:add_edit("Min random patrols ("..f..")", "32", "min_patrol_squads", f)
+		self.faction_combos[f].max_patrol_squads = self:add_edit("Max random patrols ("..f..")", "32", "max_patrol_squads", f)
+		self.faction_combos[f].min_patrol_time = self:add_edit("Min patrol time ("..f..")", "60", "min_patrol_time", f)
+		self.faction_combos[f].max_patrol_time = self:add_edit("Max patrol time ("..f..")", "240", "max_patrol_time", f)
+		self.faction_combos[f].min_patrol_idle_time = self:add_edit("Min patrol idle time ("..f..")", "60", "min_patrol_idle_time", f)
+		self.faction_combos[f].max_patrol_idle_time = self:add_edit("Max patrol idle time ("..f..")", "240", "max_patrol_idle_time", f)
+		self.faction_combos[f].resource_boost = self:add_edit("Resource level boost ("..f..")", "0", "resource_boost", f)
+		self.faction_combos[f].offline_power_multiplier = self:add_edit("Offline power multiplier ("..f..")", "1.00", "offline_power_multiplier", f)
+		self.faction_combos[f].expansion_aggression = self:add_edit("Expansion aggression ("..f..")", "50",  "expansion_aggression", f)
+		self.faction_combos[f].resurgence_chance = self:add_edit("Resurgence chance ("..f..")", "0.25", "resurgence_chance", f)
+		self.faction_combos[f].night_activity_chance = self:add_edit("Night activity chance ("..f..")", "0.25", "night_activity_chance", f)
+        self.faction_combos[f].base_priority = self:add_edit("Base priority ("..f..")", "3", "base_priority", f)
+        self.faction_combos[f].resource_priority = self:add_edit("Resource priority ("..f..")", "1", "resource_priority", f)
+		self.faction_combos[f].territory_priority = self:add_edit("Territory priority ("..f..")", "0", "territory_priority", f)
+        self.faction_combos[f].flag_priority = self:add_edit("Faction flag priority ("..f..")", "1", "flag_priority", f)
+        self.faction_combos[f].is_being_targeted_priority = self:add_edit("Is being targeted priority ("..f..")", "2", "is_being_targeted_priority", f)
+        self.faction_combos[f].target_weaker_priority = self:add_edit("Target is weaker priority ("..f..")", "2", "target_weaker_priority", f)
+        self.faction_combos[f].target_stronger_priority = self:add_edit("Target is stronger priority ("..f..")", "-1", "target_stronger_priority", f)
+		self.faction_combos[f].target_on_same_level_priority = self:add_edit("Target on same level priority ("..f..")", "15", "target_on_same_level_priority", f)
+		self.faction_combos[f].max_active_squads_per_target = self:add_edit("Max active squads per target ("..f..")", "2", "max_active_squads_per_target", f)
+		self.faction_combos[f].max_smart_targets_per_base = self:add_edit("Max smart targets per base ("..f..")", "2", "max_smart_targets_per_base", f)
+	end
+end
+
+function warfare_options_dialog:add_break()
+	local st = xml:InitStatic("templ_item", nil)
+	local txt = xml:InitEditBox("txt_template", st)
+	local label = "-----------------------"
+	txt:Enable(false)
+	txt:SetText(label)		
+	self.scroll_v:AddWindow(st, true)
+end
+
+function warfare_options_dialog:add_label(lbl)
+	local st = xml:InitStatic("templ_item", nil)
+	local txt = xml:InitEditBox("txt_template", st)		
+	local label = lbl
+	txt:Enable(false)
+	txt:SetText(label)		
+	self.scroll_v:AddWindow(st, true)
+end
+
+function warfare_options_dialog:add_combo(label, items, default, variable, f)
+	local st = xml:InitStatic("templ_item", nil)
+	local txt = xml:InitEditBox("txt_template", st)	
+	local cmb = xml:InitComboBox("cmb_template", st)
+	
+	local def = nil
+	
+	if (f) then
+		def = warfare_options.config:r_value("warfare_options", f.."_"..variable, 0, default or "0")
+	else	
+		def = warfare_options.config:r_value("warfare_options", variable, 0, default or "0")
+	end
+	
+	cmb.items = {}	
+	
+	txt:Enable(false)
+	txt:SetText(label)
+	
+	for i,j in pairs(items) do
+		cmb:AddItem(j, i-1)
+		cmb.items[#cmb.items+1] = j
+	end
+	
+	cmb:SetText(def)
+	cmb.variable = variable
+	
+	self.scroll_v:AddWindow(st, true)
+	
+	if (variable ~= "") then
+		if not (f) then
+			self.combos[variable] = cmb --variable
+		else
+			
+			if not (self.factions[f]) then
+				self.factions[f] = {}
+			end
+			
+			self.factions[f][variable] = cmb
+		end
+	end
+	
+	return cmb
+end
+
+function warfare_options_dialog:add_edit(label, default, variable, f)
+	local st = xml:InitStatic("templ_item", nil)
+	local txt = xml:InitEditBox("txt_template", st)	
+	local edt = xml:InitEditBox("edt_template", st)
+	
+	local def = nil
+	
+	if (f) then
+		def = warfare_options.config:r_value("warfare_options", f.."_"..variable, 0, default or "0")
+	else	
+		def = warfare_options.config:r_value("warfare_options", variable, 0, default or "0")
+	end
+		
+	txt:Enable(false)
+	txt:SetText(label)
+	
+	edt:Enable(true)
+	edt:SetText(def)
+	edt.variable = variable
+	
+	self.scroll_v:AddWindow(st, true)
+	
+	if (variable ~= "") then
+		if not (f) then
+			self.edits[variable] = edt --variable
+		else
+			
+			if not (self.factions[f]) then
+				self.factions[f] = {}
+			end
+			
+			self.factions[f][variable] = edt
+		end
+	end
+	
+	return edt
+end
+
+function warfare_options_dialog:add_check(label, default, variable)
+	local st = xml:InitStatic("templ_item", nil)
+	local txt = xml:InitEditBox("txt_template", st)
+	local chk = xml:InitCheck("chk_template", st)
+	local def = warfare_options.config:r_value("warfare_options", variable, 1, default)
+	
+	txt:Enable(false)
+	txt:SetText(label)
+	chk:SetCheck(def)	
+	chk.variable = variable
+	chk.typ = 1
+	chk.txt = label
+	self.scroll_v:AddWindow(st, true)
+	
+	self.checks[variable] = chk
+	
+	return chk
+end
+
+local factions = {
+	"stalker",
+	"bandit",
+	"csky",
+	"army",
+	"freedom",
+	"dolg",
+	"ecolog",
+	"killer",
+	"monolith",
+	"zombied",
+}
+	
+function warfare_options_dialog:btn_randomize_clicked()
+	for i,f in pairs(factions) do
+		for lbl,cmb in pairs(self.combos) do
+			if string.match(cmb.variable, f) then
+				local r = cmb.items
+				cmb:SetText(tostring(r[math.random(#r*(0.55+(math.random()*0.5)))]))
+			end
+		end		
+	end
+end
+
+function warfare_options_dialog:btn_accept_clicked()
+	local current = self.cmb_presets:GetText()
+	
+	printf("current: "..current)
+
+	if (current == "") then
+		for var,chk in pairs(self.checks) do
+			self:save_check(chk)
+		end
+				
+		for var,cmb in pairs(self.combos) do
+			self:save_combo_or_edit(cmb)
+		end
+		
+		for var,edt in pairs(self.edits) do
+			self:save_combo_or_edit(edt)
+		end
+			
+		for f,tbl in pairs(self.factions) do
+			for k,e in pairs(tbl) do
+				self:save_combo_or_edit(e, f)
+			end
+		end
+
+		warfare_options.save_options()
+		
+		self.owner:ShowDialog(true)
+		self.owner:Show(true)
+	else
+		self.cmb_presets:SetText("")
+		
+		printf("warfare_presets\\"..current)
+		
+		local preset = ini_file_ex("warfare_presets\\"..current, true)
+		
+		self.checks["debug_logging"]:SetCheck(preset:r_value("warfare_options", "debug_logging", 1, false))
+		self.checks["all_out_war"]:SetCheck(preset:r_value("warfare_options", "all_out_war", 1, false))
+		self.checks["simulate_offline_combat_at_smarts"]:SetCheck(preset:r_value("warfare_options", "simulate_offline_combat_at_smarts", 1, false))
+		self.checks["disable_offline_combat"]:SetCheck(preset:r_value("warfare_options", "disable_offline_combat", 1, false))
+		--self.checks["disable_linked_levels"]:SetCheck(preset:r_value("warfare_options", "disable_linked_levels", 1, false))
+		self.checks["enable_offline_news"]:SetCheck(preset:r_value("warfare_options", "enable_offline_news", 1, true))
+		self.checks["random_starting_locations"]:SetCheck(preset:r_value("warfare_options", "random_starting_locations", 1, false))
+		self.edits["random_stalker_chance"]:SetText(preset:r_value("warfare_options", "random_starting_locations", 0, 75))
+		self.edits["random_monster_chance"]:SetText(preset:r_value("warfare_options", "random_monster_chance", 0, 50))
+		
+--av661194
+		self.checks["hide_undegraund_smarts"]:SetCheck(preset:r_value("warfare_options", "hide_undegraund_smarts", 1, false))
+--av661194
+		self.checks["show_unfriendly_squads"]:SetCheck(preset:r_value("warfare_options", "show_unfriendly_squads", 1, false))
+		self.checks["factions_keep_last_base"]:SetCheck(preset:r_value("warfare_options", "factions_keep_last_base", 1, false))
+		self.checks["enable_mutant_offline_combat"]:SetCheck(preset:r_value("warfare_options", "enable_mutant_offline_combat", 1, false))
+		self.checks["zombies_act_as_faction"]:SetCheck(preset:r_value("warfare_options", "zombies_act_as_faction", 1, false))
+		self.checks["zombie_mode"]:SetCheck(preset:r_value("warfare_options", "zombie_mode", 1, false))
+		self.checks["randomize_squad_count"]:SetCheck(preset:r_value("warfare_options", "randomize_squad_count", 1, false))		
+		self.edits["offline_news_display_percentage"]:SetText(preset:r_value("warfare_options", "offline_news_display_percentage", 0, 5))
+		self.edits["actor_influence_weight"]:SetText(preset:r_value("warfare_options", "actor_influence_weight", 0, 1))
+		self.edits["novice_squad_price"]:SetText(preset:r_value("warfare_options", "novice_squad_price", 0, 1000))
+		self.edits["advanced_squad_price"]:SetText(preset:r_value("warfare_options", "advanced_squad_price", 0, 2000))
+		self.edits["veteran_squad_price"]:SetText(preset:r_value("warfare_options", "veteran_squad_price", 0, 32000))
+		self.edits["heli_price"]:SetText(preset:r_value("warfare_options", "heli_price", 0, 64000))
+		self.edits["actor_support_enemy_rank_weight"]:SetText(preset:r_value("warfare_options", "actor_support_enemy_rank_weight", 0, 1))
+		self.edits["actor_support_reward_money"]:SetText(preset:r_value("warfare_options", "actor_support_reward_money", 0, 100))
+		self.edits["actor_support_reward_influence"]:SetText(preset:r_value("warfare_options", "actor_support_reward_influence", 0, 0.2))
+		self.edits["monster_max_squads_per_level"]:SetText(preset:r_value("warfare_options", "monster_max_squads_per_level", 0, 4))
+		self.edits["monster_min_faction_respawn"]:SetText(preset:r_value("warfare_options", "monster_min_faction_respawn", 0, 40))
+		self.edits["monster_max_faction_respawn"]:SetText(preset:r_value("warfare_options", "monster_max_faction_respawn", 0, 180))
+		self.edits["min_squad_count"]:SetText(preset:r_value("warfare_options", "min_squad_count", 0, 2))
+		self.edits["max_squad_count"]:SetText(preset:r_value("warfare_options", "max_squad_count", 0, 2))
+
+		for i,f in pairs(warfare_factions.factions) do			
+			self.faction_combos[f].min_faction_respawn:SetText(preset:r_value("warfare_options", f.."_".."min_faction_respawn", 0, 40))
+			self.faction_combos[f].max_faction_respawn:SetText(preset:r_value("warfare_options", f.."_".."max_faction_respawn", 0, 80))
+			self.faction_combos[f].min_active_squads:SetText(preset:r_value("warfare_options", f.."_".."min_active_squads", 0, 4))
+			self.faction_combos[f].max_active_squads:SetText(preset:r_value("warfare_options", f.."_".."max_active_squads", 0, 16))
+			self.faction_combos[f].min_patrol_squads:SetText(preset:r_value("warfare_options", f.."_".."min_patrol_squads", 0, 32))
+			self.faction_combos[f].max_patrol_squads:SetText(preset:r_value("warfare_options", f.."_".."max_patrol_squads", 0, 32))
+			self.faction_combos[f].min_patrol_time:SetText(preset:r_value("warfare_options", f.."_".."min_patrol_time", 0, 60))
+			self.faction_combos[f].max_patrol_time:SetText(preset:r_value("warfare_options", f.."_".."max_patrol_time", 0, 240))
+			self.faction_combos[f].resource_boost:SetText(preset:r_value("warfare_options", f.."_".."resource_boost", 0, 0))
+			self.faction_combos[f].offline_power_multiplier:SetText(preset:r_value("warfare_options", f.."_".."offline_power_multiplier", 0, 1.00))
+			self.faction_combos[f].expansion_aggression:SetText(preset:r_value("warfare_options", f.."_".."expansion_aggression", 0, 50))
+			self.faction_combos[f].resurgence_chance:SetText(preset:r_value("warfare_options", f.."_".."resurgence_chance", 0, 0.25))
+			self.faction_combos[f].night_activity_chance:SetText(preset:r_value("warfare_options", f.."_".."night_activity_chance", 0, 0.25))
+			self.faction_combos[f].base_priority:SetText(preset:r_value("warfare_options", f.."_".."base_priority", 0, 3))
+			self.faction_combos[f].resource_priority:SetText(preset:r_value("warfare_options", f.."_".."resource_priority", 0, 1))
+			self.faction_combos[f].flag_priority:SetText(preset:r_value("warfare_options", f.."_".."flag_priority", 0, 1))
+			self.faction_combos[f].is_being_targeted_priority:SetText(preset:r_value("warfare_options", f.."_".."is_being_targeted_priority", 0, 2))
+			self.faction_combos[f].target_weaker_priority:SetText(preset:r_value("warfare_options", f.."_".."target_weaker_priority", 0, 2))
+			self.faction_combos[f].target_stronger_priority:SetText(preset:r_value("warfare_options", f.."_".."target_stronger_priority", 0, -1))
+			self.faction_combos[f].max_active_squads_per_target:SetText(preset:r_value("warfare_options", f.."_".."max_active_squads_per_target", 0, 2))
+			self.faction_combos[f].max_smart_targets_per_base:SetText(preset:r_value("warfare_options", f.."_".."max_smart_targets_per_base", 0, 2))
+		end
+	end
+end
+
+function warfare_options_dialog:save_check(chk)
+	if not (warfare_options.options[chk.variable]) then	
+		--printf(tostring(chk.variable))		
+		--printf("!!! TRYING TO SAVE VARIABLE NOT FOUND IN WARFARE_OPTIONS.LTX !!!")
+	else
+		--printf("setting " .. chk.variable .. " to " .. tostring(chk:GetCheck()))
+	end
+
+	warfare_options.options[chk.variable] = chk:GetCheck()
+end
+
+function warfare_options_dialog:save_combo_or_edit(cmb, f)
+	if not (f) then
+		if not (warfare_options.options[cmb.variable]) then
+			--printf("!!! " .. tostring(cmb.variable) .. " TRYING TO SAVE VARIABLE NOT FOUND IN WARFARE_OPTIONS.LTX !!!")
+		end
+		
+		warfare_options.options[cmb.variable] = cmb:GetText()
+	else
+		if not (warfare_options.options.factions[f][cmb.variable]) then
+			--printf("!!! " .. tostring(cmb.variable) .. " TRYING TO SAVE VARIABLE NOT FOUND IN WARFARE_OPTIONS.LTX !!!")
+		else
+			--printf("--- " .. tostring(cmb.variable) .. " saving variable found in warfare_options.ltx")
+		end
+		
+		warfare_options.options.factions[f][cmb.variable] = cmb:GetText()
+	end
+end
+
+function warfare_options_dialog:save_edit(edt, f)
+	if not (f) then
+		if not (warfare_options.options[edt.variable]) then
+			--printf("!!! " .. tostring(edt.variable) .. " TRYING TO SAVE VARIABLE NOT FOUND IN WARFARE_OPTIONS.LTX !!!")
+		end
+		
+		warfare_options.options[edt.variable] = edt:GetText()
+	else
+		if not (warfare_options.options.factions[f][edt.variable]) then
+			--printf("!!! " .. tostring(edt.variable) .. " TRYING TO SAVE VARIABLE NOT FOUND IN WARFARE_OPTIONS.LTX !!!")
+		else
+			--printf("--- " .. tostring(edt.variable) .. " saving variable found in warfare_options.ltx")
+		end
+		
+		warfare_options.options.factions[f][edt.variable] = edt:GetText()
+	end
+end
+
+function warfare_options_dialog:btn_advanced_clicked()
+	warfare_control = ui_warfare_options.warfare_options_adv_dialog()
+	warfare_control:Show(false)
+end
+
+function warfare_options_dialog:btn_cancel_clicked()
+	self.owner:ShowDialog(true)
+	self:HideDialog()
+	self.owner:Show(true)
+end
+
+function warfare_options_dialog:cmb_presets_item_selected()
+	self.owner:ShowDialog(true)
+	self.owner:Show(true)
+end
