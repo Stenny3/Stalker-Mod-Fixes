@@ -1,0 +1,70 @@
+<w>	
+	<background width="1024" height="768">
+		<auto_static x="0" y="0" width="1024" height="768" stretch="1">
+			<texture x="0" y="0" width="1920" height="1080">ui\ui_background_new</texture>
+	    </auto_static>
+	</background>
+	
+	<main_dialog>
+		<dialog x="282" y="200" width="460" height="411" stretch="1">
+			<texture>ui_inGame2_screen_4</texture>
+		</dialog>
+	</main_dialog>
+		
+	<templ_item width="460" height="30"/>
+	<scroll_v x="17" y="82" width="426" height="291" right_ident="0" left_ident="0" top_indent="0" bottom_indent="0" vert_interval="0" always_show_scroll="1"/>
+	
+	<lbl_warfare_options x="121" y="38" width="216" height="32">
+		<text x="8" font="letterica18" vert_align="c" align="c">Warfare Options</text>
+	</lbl_warfare_options>	
+	
+	<btn_accept x="143" y="382" width="86" height="24" stretch="1">
+		<text align="c" font="letterica18">Apply</text>
+		<texture>ui_inGame2_button</texture>
+	</btn_accept>
+
+	<btn_cancel x="231" y="382" width="86" height="24" stretch="1">
+		<text align="c" font="letterica18">Cancel</text>
+		<texture>ui_inGame2_button</texture>
+	</btn_cancel>
+	
+	<btn_randomize x="338" y="382" width="86" height="24" stretch="1">
+		<text align="c" font="letterica18">Randomize</text>
+       <texture>ui_inGame2_button</texture>
+    </btn_randomize>
+	
+	<lbl_preset x="8" y="3" width="256" height="24">
+		<text x="5" font="letterica16" vert_align="c" align="1">Preset</text>
+	</lbl_preset>
+	
+	<cmb_presets x="173" y="3" width="175" height="9020">
+		<list_font r="170" g="170" b="170" font="letterica16"/>
+		<text_color>
+			<e r="170" g="170" b="170"/>
+			<d r="70" g="70" b="70"/>
+		</text_color>
+	</cmb_presets>
+	
+	<txt_template x="8" y="3" width="256" height="24">
+		<text x="5" font="letterica16" vert_align="c" align="l"/>
+	</txt_template>	
+	
+	<cmb_template x="210" y="3" width="175" height="9020" align="l">
+		<list_font r="170" g="170" b="170" font="letterica16"/>
+		<text_color>
+			<e r="170" g="170" b="170"/>
+			<d r="70" g="70" b="70"/>
+		</text_color>
+	</cmb_template>
+	
+	<edt_template x="210" y="3" width="175" height="24" align="l">
+		<text x="5" font="letterica16" vert_align="c" align="1"/>
+		<auto_static x="0" y="0" width="175" height="24" stretch="1">
+			<texture a="255" r="26" g="34" b="26">ui\ui_console</texture>
+		</auto_static>
+	</edt_template>
+	
+	<chk_template x="199" y="-1" width="35" height="29" stretch="1" align="l">
+		<texture>ui_inGame2_checkbox</texture>
+	</chk_template>	
+</w>
