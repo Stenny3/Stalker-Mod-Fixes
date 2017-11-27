@@ -74,17 +74,17 @@ legend			=    0,      	 0,        		0,      0,		0,		 0,		0,		0
 
 
 [reputation_relations]
-;			   terrible, really_bad, very_bad, bad, neutral, good, very_good, really_good, excellent
+;			        terrible, really_bad, very_bad, bad, neutral, good, very_good, really_good, excellent
 ;===================================================================================================
-terrible		=	0,			  0,	 	0,	 0,		  0,	 0,	 	   0,			0,		   0
-really_bad		=	0,			  0,	 	0,	 0,		  0,	 0,	 	   0,			0,		   0
-very_bad		=	0,			  0,	 	0,	 0,		  0,	 0,	 	   0,			0,		   0
-bad	        	=	0,			  0,	 	0,	 0,		  0,	 0,	 	   0,			0,		   0
-neutral			=	0,			  0,	 	0,	 0,		  0,	 0,	 	   0,			0,		   0
-good			=	0,			  0,	 	0,	 0,		  0,	 0,	 	   0,			0,		   0
-very_good		=	0,			  0,	 	0,	 0,		  0,	 0,		   0,			0,		   0
-really_good		=	0,			  0,	 	0,	 0,		  0,	 0,		   0,			0,		   0
-excellent		=	0,			  0,	 	0,	 0,		  0,	 0,		   0,			0,		   0
+terrible		=	  -2000,			 -2000,	 		-2000,	 	-2000,	-2000,	 -2000,	 	-2000,				-2000,		  -2000
+really_bad	=	  -2000,			 -1500,	 		-1500,	 	-1500,	-1500,	 -1500,	 	-1500,			  -1500,		  -1500
+very_bad		=		-2000,			 -1500,			-1000,		-1000,	-1000,	 -1000,	 	-1000,				-1000,		  -1000
+bad	        =		-2000,			 -1500,			-1000,		-200,	-200,	 -200,	  -200,		    -200,     -200
+neutral			=   -2000,			 -1500,			-1000,		-200,	   0,		  0,	 	   0,						0,		   0
+good			  =	  -2000,			 -1500,			-1000,		-200,	  75,		 100,	 	  125,			    150,		 175
+very_good		=	  -2000,			 -1500,			-1000,		-200,	  100,		 125,	   150,			    175,	   200
+really_good	=	  -2000,			 -1500,			-1000,		-200,	  125,	  150,		 175,			    200,		 250
+excellent		=	  -2000,			 -1500,	    -1000,	  -200,  150,   175,	   200,	        250,     300
 
 
 ;
@@ -95,13 +95,13 @@ excellent		=	0,			  0,	 	0,	 0,		  0,	 0,		   0,			0,		   0
 ;с определенным статусом
 [rank_kill_points]
 novice			=	5
-trainee			=	6
-experienced		=	7
-professional	=	8
-veteran			=	9
-expert			=	10
-master			=	15
-legend			=	20
+trainee			=	7
+experienced		=	9
+professional	=	11
+veteran			=	13
+expert			=	15
+master			=	20
+legend			=	25
 
 ;коэффициенты "сочувствия" группировок
 ;после воздействия на одного из членов группировки
@@ -150,41 +150,41 @@ community_goodwill_limits			= -3000, 3000
 ; Killing other stalkers.
 ;-----
 
-community_member_kill_goodwill  		= -1000	; Same faction
-friend_kill_goodwill					= -1000	; Friendly
-neutral_kill_goodwill					= -1000	; Neutral
-enemy_kill_goodwill						= -1	; Enemy
+community_member_kill_goodwill  		= -2000	; Same faction
+friend_kill_goodwill					= -2000	; Friendly
+neutral_kill_goodwill					= -2000	; Neutral
+enemy_kill_goodwill						= -10	; Enemy
 
 ; These values are now set in xr_statistic.script.
 friend_kill_reputation					= 0	; Friendly
 neutral_kill_reputation					= 0	; Neutral
-enemy_kill_reputation					= 0	; Enemy
+enemy_kill_reputation					  = 0	; Enemy
 
 ;-----
 ; Assisting stalkers in combat.
 ;-----
 
-community_member_fight_help_goodwill	= 500	; Same faction
-friend_fight_help_goodwill   			= 200	; Friendly
-neutral_fight_help_goodwill	 			= 200	; Neutral
-enemy_fight_help_goodwill    			= 1		; Enemy
+community_member_fight_help_goodwill	= 150	; Same faction
+friend_fight_help_goodwill   			= 150	; Friendly
+neutral_fight_help_goodwill	 			= 150	; Neutral
+enemy_fight_help_goodwill    			= 35	; Enemy
 
 friend_fight_help_reputation  			= 100	; Friendly
-neutral_fight_help_reputation 			= 50	; Neutral
-enemy_fight_help_reputation	  			= 0		; Enemy
+neutral_fight_help_reputation 			= 100	; Neutral
+enemy_fight_help_reputation	  			= -20	; Enemy
 
 ;-----
 ; Attacking stalkers who ARE NOT shooting at you.
 ;-----
 
-free_community_member_attack_goodwill  	= -500	; Same faction
-free_friend_attack_goodwill				= -2000 ; Friendly
-free_neutral_attack_goodwill			= -1000	; Neutral
-free_enemy_attack_goodwill				= -1	; Enemy
+free_community_member_attack_goodwill  	= -2000	      ; Same faction
+free_friend_attack_goodwill				      = -2000       ; Friendly
+free_neutral_attack_goodwill			      = -250        ; Neutral
+free_enemy_attack_goodwill				      = -100        ; Enemy
 
-free_friend_attack_reputation			= -75	; Friendly
-free_neutral_attack_reputation			= -50	; Neutral
-free_enemy_attack_reputation			= 0		; Enemy
+free_friend_attack_reputation						= -250				; Friendly
+free_neutral_attack_reputation					= -100				; Neutral
+free_enemy_attack_reputation						= 0						; Enemy
 
 ;-----
 ; Attacking stalkers who ARE shooting at you.
@@ -192,10 +192,10 @@ free_enemy_attack_reputation			= 0		; Enemy
 ; Example: You assassinate a loner and his buddies start shooting at you.
 ;-----
 
-danger_community_member_attack_goodwill = -1	; Same faction
-danger_friend_attack_goodwill			= -1	; Friendly
-danger_neutral_attack_goodwill			= -1	; Neutral
-danger_enemy_attack_goodwill			= -1 	; Enemy
+danger_community_member_attack_goodwill = 0			; Same faction
+danger_friend_attack_goodwill						= 0			; Friendly
+danger_neutral_attack_goodwill					= 0			; Neutral
+danger_enemy_attack_goodwill						= 0 		; Enemy
 
 danger_friend_attack_reputation			= 0		; Friendly
 danger_neutral_attack_reputation		= 0		; Neutral
